@@ -9,6 +9,19 @@ BimCube is a web-native, modular CAD platform. It uses a strict decoupled archit
 ```text
 <!doctype html>
 <html lang="en">
+  <style>
+      .grid-label {
+          color: #00d1b2;
+          font-family: monospace;
+          font-size: 12px;
+          padding: 2px 4px;
+          background: rgba(0, 0, 0, 0.6);
+          border-radius: 3px;
+          border: 1px solid #00d1b2;
+          margin-top: -1em; 
+          pointer-events: none; /* Crucial so we can click/orbit through the text! */
+      }
+    </style>
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -112,9 +125,10 @@ import useStore from '../../core/store';
 // 1. Import your tool contracts
 import gridManifest from '../../plugins/GridGenerator/manifest.json';
 import boxManifest from '../../plugins/BoxGenerator/manifest.json';
+import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 
 // 2. The Tool Registry Array
-const tools = [gridManifest, boxManifest];
+const tools = [gridManifest, boxManifest, floorManifest];
 
 export default function LeftPane() {
   const { activePluginId, setActivePlugin, clearActivePlugin } = useStore();
@@ -129,7 +143,7 @@ export default function LeftPane() {
         const isActive = activePluginId === manifest.id;
         
         // Let's fake some different icons based on the index for now
-        const icon = index === 0 ? '🎛️' : '📦'; 
+        const icon = index === 0 ? '🎛️' : index === 1 ? '📦' : '🏢';
 
         return (
           <button 
@@ -154,63 +168,57 @@ export default function LeftPane() {
 
 **C:\Projects\bimcube\src\components\layout\MiddlePane.jsx**
 ```text
+import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
+import { compute as floorplanCompute } from '../../plugins/FloorplanGrid/compute';
 import { useEffect } from 'react';
 import useStore from '../../core/store';
 import Slider from '../ui/Slider';
+import ColorInput from '../ui/ColorInput';
 
-// 1. Import all plugins
 import gridManifest from '../../plugins/GridGenerator/manifest.json';
 import { compute as gridCompute } from '../../plugins/GridGenerator/compute';
-
 import boxManifest from '../../plugins/BoxGenerator/manifest.json';
 import { compute as boxCompute } from '../../plugins/BoxGenerator/compute';
 
-// 2. Create the "Router" to connect an ID to its Math/Manifest
 const toolRegistry = {
   [gridManifest.id]: { manifest: gridManifest, compute: gridCompute },
-  [boxManifest.id]: { manifest: boxManifest, compute: boxCompute }
+  [boxManifest.id]: { manifest: boxManifest, compute: boxCompute },
+  [floorplanManifest.id]: { manifest: floorplanManifest, compute: floorplanCompute }
 };
 
 export default function MiddlePane() {
   const { activePluginId, pluginInputs, setInputValue, setPluginOutputs, clearActivePlugin } = useStore();
-
-  // 3. Look up the currently active tool
   const activeTool = toolRegistry[activePluginId];
 
-  // The Reactive Engine
   useEffect(() => {
-    // Make sure we have an active tool, AND that the inputs match the current tool's manifest before running the math
     if (activeTool && pluginInputs[Object.keys(activeTool.manifest.inputs)[0]] !== undefined) {
       const result = activeTool.compute(pluginInputs);
       setPluginOutputs(result);
     }
   }, [pluginInputs, activeTool, setPluginOutputs]);
 
-  // Collapse if no tool is selected
   if (!activeTool) return null;
 
   return (
-    <div style={{ width: '280px', backgroundColor: '#202020', borderRight: '1px solid #2a2a2a', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '280px', backgroundColor: '#202020', borderRight: '1px solid #2a2a2a', padding: '1.5rem', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '1rem' }}>
-        <h3 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#888' }}>
-          {activeTool.manifest.name}
-        </h3>
+        <h3 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#888' }}>{activeTool.manifest.name}</h3>
         <button onClick={clearActivePlugin} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
       </div>
 
-      {/* Auto-generate sliders based on WHICH tool is active */}
-      {Object.entries(activeTool.manifest.inputs).map(([key, config]) => (
-        <Slider
-          key={key}
-          label={config.label}
-          min={config.min}
-          max={config.max}
-          step={config.step}
-          value={pluginInputs[key] || config.defaultValue}
-          onChange={(val) => setInputValue(key, val)}
-        />
-      ))}
+      {Object.entries(activeTool.manifest.inputs).map(([key, config]) => {
+        // Render Color Input
+        if (config.type === 'color') {
+          return (
+            <ColorInput key={key} label={config.label} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />
+          );
+        }
+        // Render Range Slider
+        return (
+          <Slider key={key} label={config.label} min={config.min} max={config.max} step={config.step} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />
+        );
+      })}
     </div>
   );
 }
@@ -264,6 +272,7 @@ export default function RightPane() {
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import useStore from '../../core/store';
 
 export default function Viewport3D() {
@@ -271,22 +280,36 @@ export default function Viewport3D() {
   const pluginOutputs = useStore((state) => state.pluginOutputs);
   const groupRef = useRef(null);
 
-  // 1. Initialize the Three.js Engine
   useEffect(() => {
-    // CAPTURE THE MOUNT NODE: This is the fix for the Strict Mode crash!
     const currentMount = mountRef.current;
     if (!currentMount) return;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#242424');
 
-    const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
-    camera.position.set(10, 15, 10);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    scene.add(dirLight);
 
+    const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
+    camera.position.set(20, 15, 20);
+
+    // 1. WebGL Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     currentMount.appendChild(renderer.domElement);
 
+    // 2. CSS2D (Text) Renderer
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    labelRenderer.domElement.style.position = 'absolute';
+    labelRenderer.domElement.style.top = '0px';
+    labelRenderer.domElement.style.pointerEvents = 'none'; // Let clicks pass through to orbit controls
+    currentMount.appendChild(labelRenderer.domElement);
+
+    // 3. OrbitControls (Attach to the WebGL canvas, since labelRenderer passes clicks through)
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
@@ -297,49 +320,102 @@ export default function Viewport3D() {
     scene.add(group);
     groupRef.current = group;
 
-    // Track the animation frame so we can kill it on unmount
     let animationFrameId;
-
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
+      labelRenderer.render(scene, camera); // Render the HTML text!
     };
     animate();
 
-    // BULLETPROOF CLEANUP
     return () => {
-      cancelAnimationFrame(animationFrameId); // 1. Stop the loop
-      controls.dispose(); // 2. Clean up controls
-      
-      // 3. Safely remove the canvas from the captured DOM node
-      if (currentMount && currentMount.contains(renderer.domElement)) {
-        currentMount.removeChild(renderer.domElement);
-      }
-      
-      renderer.dispose(); // 4. Clear GPU memory
+      cancelAnimationFrame(animationFrameId);
+      controls.dispose();
+      if (currentMount && currentMount.contains(renderer.domElement)) currentMount.removeChild(renderer.domElement);
+      if (currentMount && currentMount.contains(labelRenderer.domElement)) currentMount.removeChild(labelRenderer.domElement);
+      renderer.dispose();
     };
   }, []);
 
-  // 2. The Reactive Data Loop
+  // Reactive Data Loop
   useEffect(() => {
-    if (!groupRef.current || !pluginOutputs.coordinates) return;
-
+    if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
     group.clear(); 
 
-    const geometry = new THREE.SphereGeometry(0.2, 8, 8);
-    const material = new THREE.MeshBasicMaterial({ color: '#4af626' }); 
+    const baseColor = pluginOutputs.color || '#4af626';
 
-    pluginOutputs.coordinates.forEach(pt => {
-      const sphere = new THREE.Mesh(geometry, material);
-      sphere.position.set(pt.x - 5, pt.z, pt.y - 5); 
-      group.add(sphere);
-    });
+    // 🟢 RENDER DOTS
+    if (pluginOutputs.renderType === 'points') {
+      const geometry = new THREE.SphereGeometry(0.2, 8, 8);
+      const material = new THREE.MeshBasicMaterial({ color: baseColor }); 
+      pluginOutputs.coordinates.forEach(pt => {
+        const sphere = new THREE.Mesh(geometry, material);
+        sphere.position.set(pt.x - 5, pt.z, pt.y - 5); 
+        group.add(sphere);
+      });
+    } 
+    // 📦 RENDER BOX
+    else if (pluginOutputs.renderType === 'box') {
+      const { width, height, depth } = pluginOutputs.dimensions;
+      const geometry = new THREE.BoxGeometry(width, height, depth);
+      const material = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.3 });
+      const box = new THREE.Mesh(geometry, material);
+      box.position.set(0, height / 2, 0); 
+      const edges = new THREE.EdgesGeometry(geometry);
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.2 }));
+      box.add(line);
+      group.add(box);
+    }
+    // 🏢 RENDER NEW FLOORPLAN GRID WITH TEXT!
+    else if (pluginOutputs.renderType === 'floorplan-grid') {
+      const { widthX, depthY } = pluginOutputs.dimensions;
+      const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+      const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
+
+      pluginOutputs.coordinates.forEach(pt => {
+        // Center the grid around origin (0,0,0)
+        const posX = pt.x - (widthX / 2);
+        const posZ = pt.z - (depthY / 2);
+        const posY = pt.y; // Height
+
+        // 1. Add the 3D dot
+        const dot = new THREE.Mesh(dotGeom, dotMat);
+        dot.position.set(posX, posY, posZ);
+        group.add(dot);
+
+        // 2. Add the floating HTML Label
+        const div = document.createElement('div');
+        div.className = 'grid-label';
+        div.textContent = pt.name;
+        
+        const label = new CSS2DObject(div);
+        label.position.set(posX, posY, posZ);
+        group.add(label);
+      });
+    }
 
   }, [pluginOutputs]);
 
-  return <div ref={mountRef} style={{ width: '100%', height: '100%' }} />;
+  return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />;
+}
+```
+
+**C:\Projects\bimcube\src\components\ui\ColorInput.jsx**
+```text
+export default function ColorInput({ label, value, onChange }) {
+  return (
+    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{label}</span>
+      <input 
+        type="color" 
+        value={value} 
+        onChange={(e) => onChange(e.target.value)} 
+        style={{ cursor: 'pointer', border: 'none', width: '32px', height: '32px', padding: 0, borderRadius: '4px', backgroundColor: 'transparent' }} 
+      />
+    </div>
+  );
 }
 ```
 
@@ -421,23 +497,14 @@ export default useStore;
 
 **C:\Projects\bimcube\src\plugins\BoxGenerator\compute.js**
 ```text
-// This is a pure function. It takes our slider inputs and generates grid coordinates.
 export function compute(inputs) {
-  const { xWidth, yWidth } = inputs;
-  const points = [];
-
-  // Generate a simple 2D grid of coordinates
-  for (let x = 0; x < xWidth; x++) {
-    for (let y = 0; y < yWidth; y++) {
-      points.push({ x, y, z: 0 }); // z is 0 because it's a flat grid for now
-    }
-  }
-
-  // Return the calculated data payload
+  const { width, height, depth, color } = inputs;
+  
   return {
-    description: `Generated a ${xWidth}x${yWidth} grid`,
-    totalPoints: points.length,
-    coordinates: points
+    description: `Solid ${width}x${height}x${depth} 3D Box`,
+    renderType: 'box', // Tell the Viewport what shape to draw!
+    dimensions: { width, height, depth },
+    color: color || '#4af626'
   };
 }
 ```
@@ -448,14 +515,75 @@ export function compute(inputs) {
   "id": "box-generator",
   "name": "Box Generator",
   "version": "1.0.0",
-  "description": "Generates a 3D box based on Width, Height, and Depth.",
+  "description": "Generates a solid 3D box.",
   "inputs": {
     "width": { "type": "range", "label": "Width", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
     "height": { "type": "range", "label": "Height", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
-    "depth": { "type": "range", "label": "Depth", "min": 1, "max": 20, "step": 1, "defaultValue": 5 }
+    "depth": { "type": "range", "label": "Depth", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
+    "color": { "type": "color", "label": "Box Color", "defaultValue": "#4af626" }
   },
   "outputs": {
-    "description": "Dimensions for a 3D Box."
+    "description": "Solid 3D Mesh properties"
+  }
+}
+```
+
+**C:\Projects\bimcube\src\plugins\FloorplanGrid\compute.js**
+```text
+export function compute(inputs) {
+  const { widthX, depthY, z1, z2, z3 } = inputs;
+  
+  // X-Axis Math
+  const Ex = widthX / 2;
+  const B = Ex / 3;
+  const uAxis = { 'A': 0, 'B': B, 'C': B + B, 'D': Ex - 2, 'E': Ex, 'F': Ex + 2, 'G': Ex + B, 'H': Ex + B + B, 'I': widthX };
+
+  // Depth/Z-Axis Math
+  const Ey = depthY / 2;
+  const vAxis = { '0': 0, '1': Ey - 3, '2': Ey - 2.2, '3': Ey - 0.5, '4': Ey, '5': Ey + 0.5, '6': Ey + 2.2, '7': Ey + 3, '8': depthY };
+
+  const storeys = [z1, z2, z3];
+  const points = [];
+
+  // Loop through storeys, then X, then Depth
+  storeys.forEach(storeyHeight => {
+      for (const [uName, xVal] of Object.entries(uAxis)) {
+          for (const [vName, zVal] of Object.entries(vAxis)) {
+              points.push({
+                  name: `${uName}${vName}`, 
+                  x: xVal,
+                  y: storeyHeight, // Y is vertical height in Three.js
+                  z: zVal          // Z is depth
+              });
+          }
+      }
+  });
+
+  return {
+      description: `Multi-storey grid`,
+      renderType: 'floorplan-grid', // The magic word for our Viewport!
+      dimensions: { widthX, depthY },
+      coordinates: points
+  };
+}
+```
+
+**C:\Projects\bimcube\src\plugins\FloorplanGrid\manifest.json**
+```text
+{
+  "id": "floorplan-grid",
+  "name": "Floorplan Grid",
+  "version": "1.0.0",
+  "description": "Multi-storey parametric architectural grid.",
+  "inputs": {
+    "widthX": { "type": "range", "label": "Width (X)", "min": 22, "max": 50, "step": 0.5, "defaultValue": 22 },
+    "depthY": { "type": "range", "label": "Depth (Y)", "min": 16, "max": 50, "step": 0.5, "defaultValue": 16 },
+    "z1": { "type": "range", "label": "Storey 1 Height", "min": 0, "max": 15, "step": 0.1, "defaultValue": 0 },
+    "z2": { "type": "range", "label": "Storey 2 Height", "min": 0, "max": 15, "step": 0.1, "defaultValue": 3.0 },
+    "z3": { "type": "range", "label": "Storey 3 Height", "min": 0, "max": 15, "step": 0.1, "defaultValue": 6.0 }
+  },
+  "outputs": {
+    "description": "Annotated 3D coordinates"
   }
 }
 ```
@@ -463,23 +591,18 @@ export function compute(inputs) {
 **C:\Projects\bimcube\src\plugins\GridGenerator\compute.js**
 ```text
 export function compute(inputs) {
-  const { width, height, depth } = inputs;
+  const { xWidth, yWidth } = inputs;
   const points = [];
 
-  // Generate a hollow 3D shell of coordinates
-  for (let x = 0; x <= width; x++) {
-    for (let y = 0; y <= height; y++) {
-      for (let z = 0; z <= depth; z++) {
-        // Only keep the point if it sits on the absolute outer edge (hollow box)
-        if (x === 0 || x === width || y === 0 || y === height || z === 0 || z === depth) {
-          points.push({ x, y, z }); 
-        }
-      }
+  for (let x = 0; x < xWidth; x++) {
+    for (let y = 0; y < yWidth; y++) {
+      points.push({ x, y, z: 0 }); 
     }
   }
 
   return {
-    description: `Generated a hollow ${width}x${height}x${depth} 3D Box`,
+    description: `Generated a ${xWidth}x${yWidth} grid`,
+    renderType: 'points', // Tell the Viewport to draw dots!
     totalPoints: points.length,
     coordinates: points
   };

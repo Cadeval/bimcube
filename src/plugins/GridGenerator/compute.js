@@ -10,6 +10,7 @@ export function compute(inputs) {
 
   return {
     description: `Generated a ${xWidth}x${yWidth} grid`,
+    renderType: 'points', // Tell the Viewport to draw dots!
     totalPoints: points.length,
     coordinates: points
   };

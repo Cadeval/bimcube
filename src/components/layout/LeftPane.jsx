@@ -3,9 +3,10 @@ import useStore from '../../core/store';
 // 1. Import your tool contracts
 import gridManifest from '../../plugins/GridGenerator/manifest.json';
 import boxManifest from '../../plugins/BoxGenerator/manifest.json';
+import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 
-// 2. The Tool Registry Array
-const tools = [gridManifest, boxManifest];
+// 2. The Tool Registry Array (Typo Fixed Here!)
+const tools = [gridManifest, boxManifest, floorplanManifest];
 
 export default function LeftPane() {
   const { activePluginId, setActivePlugin, clearActivePlugin } = useStore();
@@ -20,7 +21,7 @@ export default function LeftPane() {
         const isActive = activePluginId === manifest.id;
         
         // Let's fake some different icons based on the index for now
-        const icon = index === 0 ? '🎛️' : '📦'; 
+        const icon = index === 0 ? '🎛️' : index === 1 ? '📦' : '🏢';
 
         return (
           <button 

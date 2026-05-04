@@ -1,20 +1,10 @@
 export function compute(inputs) {
-  const { width, height, depth } = inputs;
-  const points = [];
-
-  for (let x = 0; x <= width; x++) {
-    for (let y = 0; y <= height; y++) {
-      for (let z = 0; z <= depth; z++) {
-        if (x === 0 || x === width || y === 0 || y === height || z === 0 || z === depth) {
-          points.push({ x, y, z }); 
-        }
-      }
-    }
-  }
-
+  const { width, height, depth, color } = inputs;
+  
   return {
-    description: `Generated a hollow ${width}x${height}x${depth} 3D Box`,
-    totalPoints: points.length,
-    coordinates: points
+    description: `Solid ${width}x${height}x${depth} 3D Box`,
+    renderType: 'box', // Tell the Viewport what shape to draw!
+    dimensions: { width, height, depth },
+    color: color || '#4af626'
   };
 }

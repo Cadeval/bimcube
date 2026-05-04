@@ -5,6 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>bimcube</title>
+    
+    <!-- Floating 3D Text Styles -->
+    <style>
+      .grid-label {
+          color: #00d1b2;
+          font-family: monospace;
+          font-size: 12px;
+          padding: 2px 4px;
+          background: rgba(0, 0, 0, 0.6);
+          border-radius: 3px;
+          border: 1px solid #00d1b2;
+          margin-top: -1em; 
+          pointer-events: none; /* Crucial so we can click/orbit through the text! */
+      }
+    </style>
   </head>
   <body style="margin: 0; padding: 0; background-color: #121212; overflow: hidden;">
     <div id="root"></div>
