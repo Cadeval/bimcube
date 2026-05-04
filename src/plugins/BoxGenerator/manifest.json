@@ -1,0 +1,14 @@
+{
+  "id": "box-generator",
+  "name": "Box Generator",
+  "version": "1.0.0",
+  "description": "Generates a 3D box based on Width, Height, and Depth.",
+  "inputs": {
+    "width": { "type": "range", "label": "Width", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
+    "height": { "type": "range", "label": "Height", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
+    "depth": { "type": "range", "label": "Depth", "min": 1, "max": 20, "step": 1, "defaultValue": 5 }
+  },
+  "outputs": {
+    "description": "Dimensions for a 3D Box."
+  }
+}

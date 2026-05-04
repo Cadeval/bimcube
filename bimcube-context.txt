@@ -1,0 +1,519 @@
+# 🧊 BimCube: Master Context Snapshot
+
+**Project Overview:**
+BimCube is a web-native, modular CAD platform. It uses a strict decoupled architecture: React handles the UI, Zustand handles the global state bus, Three.js handles the 3D viewport, and isolated pure-javascript plugins handle the math/geometry generation.
+
+---
+
+**index.html**
+```text
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bimcube</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #121212; overflow: hidden;">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+```
+
+**vite.config.js**
+```text
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  base: '/bimcube/', // <-- ADD THIS LINE EXACTLY LIKE THIS
+})
+```
+
+**package.json**
+```text
+{
+  "name": "bimcube",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "predeploy": "npm run build", 
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "three": "^0.184.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "gh-pages": "^6.3.0",
+    "globals": "^17.5.0",
+    "vite": "^8.0.10"
+  }
+}
+
+```
+
+**C:\Projects\bimcube\src\App.jsx**
+```text
+import LeftPane from './components/layout/LeftPane';
+import MiddlePane from './components/layout/MiddlePane';
+import RightPane from './components/layout/RightPane';
+
+function App() {
+  return (
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', margin: 0, padding: 0, backgroundColor: '#121212', color: '#e0e0e0', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <LeftPane />
+      <MiddlePane />
+      <RightPane />
+    </div>
+  );
+}
+
+export default App;
+```
+
+**C:\Projects\bimcube\src\main.jsx**
+```text
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.jsx'
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+```
+
+**C:\Projects\bimcube\src\components\layout\LeftPane.jsx**
+```text
+import useStore from '../../core/store';
+
+// 1. Import your tool contracts
+import gridManifest from '../../plugins/GridGenerator/manifest.json';
+import boxManifest from '../../plugins/BoxGenerator/manifest.json';
+
+// 2. The Tool Registry Array
+const tools = [gridManifest, boxManifest];
+
+export default function LeftPane() {
+  const { activePluginId, setActivePlugin, clearActivePlugin } = useStore();
+
+  return (
+    <div style={{ width: '60px', backgroundColor: '#181818', borderRight: '1px solid #2a2a2a', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem 0', zIndex: 20 }}>
+      
+      <div style={{ color: '#fff', fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem' }}>BC</div>
+
+      {/* 3. Loop through the tools and auto-generate the buttons! */}
+      {tools.map((manifest, index) => {
+        const isActive = activePluginId === manifest.id;
+        
+        // Let's fake some different icons based on the index for now
+        const icon = index === 0 ? '🎛️' : '📦'; 
+
+        return (
+          <button 
+            key={manifest.id}
+            onClick={() => isActive ? clearActivePlugin() : setActivePlugin(manifest)}
+            title={manifest.name}
+            style={{ 
+              width: '44px', height: '44px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s', marginBottom: '10px',
+              backgroundColor: isActive ? '#2a2a2a' : 'transparent',
+              color: isActive ? '#4af626' : '#666',
+              boxShadow: isActive ? 'inset 2px 0 0 0 #4af626' : 'none'
+            }}
+          >
+            {icon}
+          </button>
+        )
+      })}
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\components\layout\MiddlePane.jsx**
+```text
+import { useEffect } from 'react';
+import useStore from '../../core/store';
+import Slider from '../ui/Slider';
+
+// 1. Import all plugins
+import gridManifest from '../../plugins/GridGenerator/manifest.json';
+import { compute as gridCompute } from '../../plugins/GridGenerator/compute';
+
+import boxManifest from '../../plugins/BoxGenerator/manifest.json';
+import { compute as boxCompute } from '../../plugins/BoxGenerator/compute';
+
+// 2. Create the "Router" to connect an ID to its Math/Manifest
+const toolRegistry = {
+  [gridManifest.id]: { manifest: gridManifest, compute: gridCompute },
+  [boxManifest.id]: { manifest: boxManifest, compute: boxCompute }
+};
+
+export default function MiddlePane() {
+  const { activePluginId, pluginInputs, setInputValue, setPluginOutputs, clearActivePlugin } = useStore();
+
+  // 3. Look up the currently active tool
+  const activeTool = toolRegistry[activePluginId];
+
+  // The Reactive Engine
+  useEffect(() => {
+    // Make sure we have an active tool, AND that the inputs match the current tool's manifest before running the math
+    if (activeTool && pluginInputs[Object.keys(activeTool.manifest.inputs)[0]] !== undefined) {
+      const result = activeTool.compute(pluginInputs);
+      setPluginOutputs(result);
+    }
+  }, [pluginInputs, activeTool, setPluginOutputs]);
+
+  // Collapse if no tool is selected
+  if (!activeTool) return null;
+
+  return (
+    <div style={{ width: '280px', backgroundColor: '#202020', borderRight: '1px solid #2a2a2a', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '1rem' }}>
+        <h3 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#888' }}>
+          {activeTool.manifest.name}
+        </h3>
+        <button onClick={clearActivePlugin} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+      </div>
+
+      {/* Auto-generate sliders based on WHICH tool is active */}
+      {Object.entries(activeTool.manifest.inputs).map(([key, config]) => (
+        <Slider
+          key={key}
+          label={config.label}
+          min={config.min}
+          max={config.max}
+          step={config.step}
+          value={pluginInputs[key] || config.defaultValue}
+          onChange={(val) => setInputValue(key, val)}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\components\layout\RightPane.jsx**
+```text
+import { useState } from 'react';
+import useStore from '../../core/store';
+import Viewport3D from './Viewport3D';
+
+export default function RightPane() {
+  const pluginOutputs = useStore((state) => state.pluginOutputs);
+  const [activeTab, setActiveTab] = useState('3d');
+
+  const tabStyle = (isActive) => ({
+    padding: '0.5rem 1rem', cursor: 'pointer', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s',
+    backgroundColor: isActive ? '#333' : 'transparent',
+    color: isActive ? '#fff' : '#888'
+  });
+
+  return (
+    <div style={{ flex: 1, position: 'relative', backgroundColor: '#121212', overflow: 'hidden' }}>
+      
+      {/* --- FLOATING TABS HEADER --- */}
+      <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10, display: 'flex', gap: '4px', backgroundColor: 'rgba(24, 24, 24, 0.8)', padding: '4px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #333' }}>
+        <button onClick={() => setActiveTab('3d')} style={tabStyle(activeTab === '3d')}>🧊 3D View</button>
+        <button onClick={() => setActiveTab('data')} style={tabStyle(activeTab === 'data')}>📊 Data View</button>
+      </div>
+
+      {/* --- CANVAS CONTENT --- */}
+      <div style={{ width: '100%', height: '100%' }}>
+        {activeTab === 'data' ? (
+          <pre style={{ margin: 0, width: '100%', height: '100%', backgroundColor: '#121212', color: '#4af626', padding: '4.5rem 1.5rem 1.5rem', overflowY: 'auto', boxSizing: 'border-box', fontSize: '0.9rem' }}>
+            {Object.keys(pluginOutputs).length === 0 
+              ? "// Select a tool and generate data..." 
+              : JSON.stringify(pluginOutputs, null, 2)}
+          </pre>
+        ) : (
+          <Viewport3D />
+        )}
+      </div>
+
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\components\layout\Viewport3D.jsx**
+```text
+import { useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import useStore from '../../core/store';
+
+export default function Viewport3D() {
+  const mountRef = useRef(null);
+  const pluginOutputs = useStore((state) => state.pluginOutputs);
+  const groupRef = useRef(null);
+
+  // 1. Initialize the Three.js Engine
+  useEffect(() => {
+    // CAPTURE THE MOUNT NODE: This is the fix for the Strict Mode crash!
+    const currentMount = mountRef.current;
+    if (!currentMount) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#242424');
+
+    const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
+    camera.position.set(10, 15, 10);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    currentMount.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    const gridHelper = new THREE.GridHelper(50, 50, '#555555', '#444444');
+    scene.add(gridHelper);
+
+    const group = new THREE.Group();
+    scene.add(group);
+    groupRef.current = group;
+
+    // Track the animation frame so we can kill it on unmount
+    let animationFrameId;
+
+    const animate = () => {
+      animationFrameId = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // BULLETPROOF CLEANUP
+    return () => {
+      cancelAnimationFrame(animationFrameId); // 1. Stop the loop
+      controls.dispose(); // 2. Clean up controls
+      
+      // 3. Safely remove the canvas from the captured DOM node
+      if (currentMount && currentMount.contains(renderer.domElement)) {
+        currentMount.removeChild(renderer.domElement);
+      }
+      
+      renderer.dispose(); // 4. Clear GPU memory
+    };
+  }, []);
+
+  // 2. The Reactive Data Loop
+  useEffect(() => {
+    if (!groupRef.current || !pluginOutputs.coordinates) return;
+
+    const group = groupRef.current;
+    group.clear(); 
+
+    const geometry = new THREE.SphereGeometry(0.2, 8, 8);
+    const material = new THREE.MeshBasicMaterial({ color: '#4af626' }); 
+
+    pluginOutputs.coordinates.forEach(pt => {
+      const sphere = new THREE.Mesh(geometry, material);
+      sphere.position.set(pt.x - 5, pt.z, pt.y - 5); 
+      group.add(sphere);
+    });
+
+  }, [pluginOutputs]);
+
+  return <div ref={mountRef} style={{ width: '100%', height: '100%' }} />;
+}
+```
+
+**C:\Projects\bimcube\src\components\ui\Slider.jsx**
+```text
+export default function Slider({ label, min, max, step, value, onChange }) {
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#ccc' }}>
+        <span>{label}</span>
+        <span style={{ color: '#4af626', fontWeight: 'bold' }}>{value}</span>
+      </div>
+      <input 
+        type="range" 
+        min={min} 
+        max={max} 
+        step={step} 
+        value={value} 
+        onChange={(e) => onChange(Number(e.target.value))} 
+        style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626' }} 
+      />
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\core\store.js**
+```text
+import { create } from 'zustand';
+
+const useStore = create((set) => ({
+  // --- 1. Current Active Context ---
+  activePluginId: null,
+  
+  // --- 2. The Data Bus ---
+  pluginInputs: {},   
+  pluginOutputs: {},  
+  
+  // --- 3. Actions (Mutators) ---
+  
+  setActivePlugin: (manifest) => set((state) => {
+    // Make a copy of our current inputs
+    const updatedInputs = { ...state.pluginInputs };
+    
+    // Smart Initialization: Only apply defaults if the user hasn't set a value yet!
+    for (const [key, config] of Object.entries(manifest.inputs)) {
+      if (updatedInputs[key] === undefined) {
+        updatedInputs[key] = config.defaultValue;
+      }
+    }
+
+    return {
+      activePluginId: manifest.id,
+      pluginInputs: updatedInputs
+      // Note: We are NO LONGER resetting pluginOutputs to {} here!
+    };
+  }),
+
+  setInputValue: (key, value) => set((state) => ({
+    pluginInputs: {
+      ...state.pluginInputs,
+      [key]: value
+    }
+  })),
+
+  setPluginOutputs: (data) => set(() => ({
+    pluginOutputs: data
+  })),
+
+  // Just hide the UI, don't destroy the data!
+  clearActivePlugin: () => set(() => ({
+    activePluginId: null
+    // Note: We are NO LONGER resetting pluginOutputs to {} here either!
+  }))
+}));
+
+export default useStore;
+```
+
+**C:\Projects\bimcube\src\plugins\BoxGenerator\compute.js**
+```text
+// This is a pure function. It takes our slider inputs and generates grid coordinates.
+export function compute(inputs) {
+  const { xWidth, yWidth } = inputs;
+  const points = [];
+
+  // Generate a simple 2D grid of coordinates
+  for (let x = 0; x < xWidth; x++) {
+    for (let y = 0; y < yWidth; y++) {
+      points.push({ x, y, z: 0 }); // z is 0 because it's a flat grid for now
+    }
+  }
+
+  // Return the calculated data payload
+  return {
+    description: `Generated a ${xWidth}x${yWidth} grid`,
+    totalPoints: points.length,
+    coordinates: points
+  };
+}
+```
+
+**C:\Projects\bimcube\src\plugins\BoxGenerator\manifest.json**
+```text
+{
+  "id": "box-generator",
+  "name": "Box Generator",
+  "version": "1.0.0",
+  "description": "Generates a 3D box based on Width, Height, and Depth.",
+  "inputs": {
+    "width": { "type": "range", "label": "Width", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
+    "height": { "type": "range", "label": "Height", "min": 1, "max": 20, "step": 1, "defaultValue": 5 },
+    "depth": { "type": "range", "label": "Depth", "min": 1, "max": 20, "step": 1, "defaultValue": 5 }
+  },
+  "outputs": {
+    "description": "Dimensions for a 3D Box."
+  }
+}
+```
+
+**C:\Projects\bimcube\src\plugins\GridGenerator\compute.js**
+```text
+export function compute(inputs) {
+  const { width, height, depth } = inputs;
+  const points = [];
+
+  // Generate a hollow 3D shell of coordinates
+  for (let x = 0; x <= width; x++) {
+    for (let y = 0; y <= height; y++) {
+      for (let z = 0; z <= depth; z++) {
+        // Only keep the point if it sits on the absolute outer edge (hollow box)
+        if (x === 0 || x === width || y === 0 || y === height || z === 0 || z === depth) {
+          points.push({ x, y, z }); 
+        }
+      }
+    }
+  }
+
+  return {
+    description: `Generated a hollow ${width}x${height}x${depth} 3D Box`,
+    totalPoints: points.length,
+    coordinates: points
+  };
+}
+```
+
+**C:\Projects\bimcube\src\plugins\GridGenerator\manifest.json**
+```text
+{
+  "id": "grid-generator",
+  "name": "Grid Generator",
+  "version": "1.0.0",
+  "description": "Generates a 2D grid based on X and Y parameters.",
+  "inputs": {
+    "xWidth": {
+      "type": "range",
+      "label": "X Width",
+      "min": 1,
+      "max": 50,
+      "step": 1,
+      "defaultValue": 10
+    },
+    "yWidth": {
+      "type": "range",
+      "label": "Y Width",
+      "min": 1,
+      "max": 50,
+      "step": 1,
+      "defaultValue": 10
+    }
+  },
+  "outputs": {
+    "description": "Array of 2D coordinates representing grid intersections."
+  }
+}
+```
+
