@@ -1,22 +1,29 @@
+import { useEffect } from 'react';
 import useStore from '../../core/store';
 
-// 1. Import your tool contracts
-import gridManifest from '../../plugins/GridGenerator/manifest.json';
-import boxManifest from '../../plugins/BoxGenerator/manifest.json';
+// 1. Import ONLY your master Floorplan tool
 import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 
-const tools = [gridManifest, boxManifest, floorplanManifest];
+// 2. The Tool Registry Array
+const tools = [floorplanManifest];
 
 export default function LeftPane() {
   const { activePluginId, setActivePlugin, clearActivePlugin } = useStore();
 
+  // 🪄 NEW: Auto-activate the Floorplan tool when the app loads!
+  useEffect(() => {
+    if (!activePluginId) {
+      setActivePlugin(floorplanManifest);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div style={{ 
       width: '60px', 
-      // 🪄 NEW: Glassmorphism effect! Semi-transparent with a blur
       backgroundColor: 'rgba(24, 24, 24, 0.65)', 
       backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)', // For Safari support
+      WebkitBackdropFilter: 'blur(12px)', 
       borderRight: '1px solid rgba(255, 255, 255, 0.05)', 
       display: 'flex', 
       flexDirection: 'column', 
@@ -27,9 +34,9 @@ export default function LeftPane() {
       
       <div style={{ color: '#fff', fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>BC</div>
 
-      {tools.map((manifest, index) => {
+      {tools.map((manifest) => {
         const isActive = activePluginId === manifest.id;
-        const icon = index === 0 ? '🎛️' : index === 1 ? '📦' : '🏢';
+        const icon = '🏢'; // Hardcode the building icon since it's our main tool
 
         return (
           <button 

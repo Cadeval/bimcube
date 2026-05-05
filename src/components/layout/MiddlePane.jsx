@@ -2,18 +2,13 @@ import { useEffect } from 'react';
 import useStore from '../../core/store';
 import Slider from '../ui/Slider';
 import ColorInput from '../ui/ColorInput';
-import NumberInput from '../ui/NumberInput'; // <-- Import new component
+import NumberInput from '../ui/NumberInput'; 
 
-import gridManifest from '../../plugins/GridGenerator/manifest.json';
-import { compute as gridCompute } from '../../plugins/GridGenerator/compute';
-import boxManifest from '../../plugins/BoxGenerator/manifest.json';
-import { compute as boxCompute } from '../../plugins/BoxGenerator/compute';
+// Only import the Floorplan tool logic!
 import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 import { compute as floorplanCompute } from '../../plugins/FloorplanGrid/compute';
 
 const toolRegistry = {
-  [gridManifest.id]: { manifest: gridManifest, compute: gridCompute },
-  [boxManifest.id]: { manifest: boxManifest, compute: boxCompute },
   [floorplanManifest.id]: { manifest: floorplanManifest, compute: floorplanCompute }
 };
 
@@ -42,7 +37,7 @@ export default function MiddlePane() {
         if (config.type === 'color') {
           return <ColorInput key={key} label={config.label} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
         }
-        if (config.type === 'number') { // <-- Add Number routing!
+        if (config.type === 'number') { 
           return <NumberInput key={key} label={config.label} value={pluginInputs[key] ?? config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
         }
         return <Slider key={key} label={config.label} min={config.min} max={config.max} step={config.step} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
