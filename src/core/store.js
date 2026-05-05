@@ -1,49 +1,40 @@
 import { create } from 'zustand';
 
 const useStore = create((set) => ({
-  // --- 1. Current Active Context ---
   activePluginId: null,
-  
-  // --- 2. The Data Bus ---
   pluginInputs: {},   
   pluginOutputs: {},  
+  theme: 'dark', 
   
-  // --- 3. Actions (Mutators) ---
+  // --- MULTI-DIMENSIONAL VISIBILITY MATRIX ---
+  visibility: {
+    levels: { 0: true, 1: true, 2: true, 3: true },
+    types: {
+      Grid: true, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
+    }
+  },
+
+  toggleLevel: (levelStr) => set((state) => ({
+    visibility: { ...state.visibility, levels: { ...state.visibility.levels, [levelStr]: !state.visibility.levels[levelStr] } }
+  })),
+
+  toggleType: (typeStr) => set((state) => ({
+    visibility: { ...state.visibility, types: { ...state.visibility.types, [typeStr]: !state.visibility.types[typeStr] } }
+  })),
+
+  toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
   
   setActivePlugin: (manifest) => set((state) => {
-    // Make a copy of our current inputs
     const updatedInputs = { ...state.pluginInputs };
-    
-    // Smart Initialization: Only apply defaults if the user hasn't set a value yet!
     for (const [key, config] of Object.entries(manifest.inputs)) {
-      if (updatedInputs[key] === undefined) {
-        updatedInputs[key] = config.defaultValue;
-      }
+      if (updatedInputs[key] === undefined) updatedInputs[key] = config.defaultValue;
     }
-
-    return {
-      activePluginId: manifest.id,
-      pluginInputs: updatedInputs
-      // Note: We are NO LONGER resetting pluginOutputs to {} here!
-    };
+    return { activePluginId: manifest.id, pluginInputs: updatedInputs };
   }),
 
-  setInputValue: (key, value) => set((state) => ({
-    pluginInputs: {
-      ...state.pluginInputs,
-      [key]: value
-    }
-  })),
-
-  setPluginOutputs: (data) => set(() => ({
-    pluginOutputs: data
-  })),
-
-  // Just hide the UI, don't destroy the data!
-  clearActivePlugin: () => set(() => ({
-    activePluginId: null
-    // Note: We are NO LONGER resetting pluginOutputs to {} here either!
-  }))
+  setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
+  setPluginOutputs: (data) => set(() => ({ pluginOutputs: data })),
+  clearActivePlugin: () => set(() => ({ activePluginId: null }))
 }));
 
 export default useStore;

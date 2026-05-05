@@ -6,15 +6,18 @@ import useStore from '../../core/store';
 
 export default function Viewport3D() {
   const mountRef = useRef(null);
-  const pluginOutputs = useStore((state) => state.pluginOutputs);
+  const { pluginOutputs, theme, visibility } = useStore(); 
   const groupRef = useRef(null);
+  const sceneRef = useRef(null);
+  const gridHelperRef = useRef(null);
 
   useEffect(() => {
     const currentMount = mountRef.current;
     if (!currentMount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#242424');
+    scene.background = new THREE.Color(theme === 'dark' ? '#242424' : '#e0e0e0');
+    sceneRef.current = scene;
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
@@ -25,25 +28,23 @@ export default function Viewport3D() {
     const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
     camera.position.set(20, 15, 20);
 
-    // 1. WebGL Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     currentMount.appendChild(renderer.domElement);
 
-    // 2. CSS2D (Text) Renderer
     const labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     labelRenderer.domElement.style.position = 'absolute';
     labelRenderer.domElement.style.top = '0px';
-    labelRenderer.domElement.style.left = '0px'; // <-- FIX: Aligns text canvas to the left
-    labelRenderer.domElement.style.pointerEvents = 'none'; // Let clicks pass through to orbit controls
+    labelRenderer.domElement.style.left = '0px'; 
+    labelRenderer.domElement.style.pointerEvents = 'none'; 
     currentMount.appendChild(labelRenderer.domElement);
 
-    // 3. OrbitControls (Attach to the WebGL canvas, since labelRenderer passes clicks through)
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
     const gridHelper = new THREE.GridHelper(50, 50, '#555555', '#444444');
+    gridHelperRef.current = gridHelper;
     scene.add(gridHelper);
 
     const group = new THREE.Group();
@@ -55,7 +56,7 @@ export default function Viewport3D() {
       animationFrameId = requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
-      labelRenderer.render(scene, camera); // Render the HTML text!
+      labelRenderer.render(scene, camera); 
     };
     animate();
 
@@ -66,67 +67,81 @@ export default function Viewport3D() {
       if (currentMount && currentMount.contains(labelRenderer.domElement)) currentMount.removeChild(labelRenderer.domElement);
       renderer.dispose();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reactive Data Loop
+  useEffect(() => {
+    if (!sceneRef.current || !gridHelperRef.current) return;
+    sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#e0e0e0');
+    gridHelperRef.current.material.color.set(theme === 'dark' ? '#555555' : '#aaaaaa');
+  }, [theme]);
+
+  // REACTIVE DATA LOOP: The Intersection Filter!
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
     group.clear(); 
 
-    const baseColor = pluginOutputs.color || '#4af626';
+    if (pluginOutputs.renderType === 'floorplan-grid') {
+      const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
 
-    // 🟢 RENDER DOTS
-    if (pluginOutputs.renderType === 'points') {
-      const geometry = new THREE.SphereGeometry(0.2, 8, 8);
-      const material = new THREE.MeshBasicMaterial({ color: baseColor }); 
-      pluginOutputs.coordinates.forEach(pt => {
-        const sphere = new THREE.Mesh(geometry, material);
-        sphere.position.set(pt.x - 5, pt.z, pt.y - 5); 
-        group.add(sphere);
-      });
-    } 
-    // 📦 RENDER BOX
-    else if (pluginOutputs.renderType === 'box') {
-      const { width, height, depth } = pluginOutputs.dimensions;
-      const geometry = new THREE.BoxGeometry(width, height, depth);
-      const material = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.3 });
-      const box = new THREE.Mesh(geometry, material);
-      box.position.set(0, height / 2, 0); 
-      const edges = new THREE.EdgesGeometry(geometry);
-      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.2 }));
-      box.add(line);
-      group.add(box);
-    }
-    // 🏢 RENDER NEW FLOORPLAN GRID WITH TEXT!
-    else if (pluginOutputs.renderType === 'floorplan-grid') {
-      const { widthX, depthY } = pluginOutputs.dimensions;
-      const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-      const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
-
-      pluginOutputs.coordinates.forEach(pt => {
-        // Center the grid around origin (0,0,0)
-        const posX = pt.x - (widthX / 2);
-        const posZ = pt.z - (depthY / 2);
-        const posY = pt.y; // Height
-
-        // 1. Add the 3D dot
-        const dot = new THREE.Mesh(dotGeom, dotMat);
-        dot.position.set(posX, posY, posZ);
-        group.add(dot);
-
-        // 2. Add the floating HTML Label
-        const div = document.createElement('div');
-        div.className = 'grid-label';
-        div.textContent = pt.name;
+      // 1. GRID LAYER
+      if (pluginOutputs.coordinates) {
+        const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
         
-        const label = new CSS2DObject(div);
-        label.position.set(posX, posY, posZ);
-        group.add(label);
-      });
-    }
+        pluginOutputs.coordinates.forEach(pt => {
+          // Matrix Logic: Is this Level ON && is the Grid Type ON?
+          if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
+            const dot = new THREE.Mesh(dotGeom, dotMat);
+            dot.position.set(pt.x, pt.y, pt.z);
+            group.add(dot);
+            
+            const div = document.createElement('div');
+            div.className = 'grid-label';
+            div.textContent = pt.name;
+            const label = new CSS2DObject(div);
+            label.position.set(pt.x, pt.y, pt.z);
+            group.add(label);
+          }
+        });
+      }
 
-  }, [pluginOutputs]);
+      // 2. SLABS LAYER
+      if (pluginOutputs.slabs) {
+        pluginOutputs.slabs.forEach(slab => {
+          // Matrix Logic: Is this Level ON && is this specific Slab Type ON?
+          if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
+            const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
+            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(slab.x, slab.y, slab.z);
+            group.add(mesh);
+          }
+        });
+      }
+
+      // 3. WALLS LAYER
+      if (pluginOutputs.walls) {
+        pluginOutputs.walls.forEach(wall => {
+          // Matrix Logic: Is this Level ON && is this specific Wall Type ON?
+          if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
+            const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
+            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(wall.x, wall.y, wall.z);
+            mesh.rotation.y = wall.rotationY; 
+            
+            const edges = new THREE.EdgesGeometry(geom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true }));
+            mesh.add(line);
+            
+            group.add(mesh);
+          }
+        });
+      }
+    }
+  }, [pluginOutputs, theme, visibility]); // Re-render when matrix toggles!
 
   return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />;
 }

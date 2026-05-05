@@ -1,14 +1,14 @@
 {
   "id": "floorplan-grid",
   "name": "Floorplan Grid",
-  "version": "1.0.0",
-  "description": "Multi-storey parametric architectural grid.",
+  "version": "1.1.0",
+  "description": "Multi-storey parametric grid with cumulative Z-heights.",
   "inputs": {
-    "widthX": { "type": "range", "label": "Width (X)", "min": 22, "max": 50, "step": 0.5, "defaultValue": 22 },
-    "depthY": { "type": "range", "label": "Depth (Y)", "min": 16, "max": 50, "step": 0.5, "defaultValue": 16 },
-    "z1": { "type": "range", "label": "Storey 1 Height", "min": 0, "max": 15, "step": 0.1, "defaultValue": 0 },
-    "z2": { "type": "range", "label": "Storey 2 Height", "min": 0, "max": 15, "step": 0.1, "defaultValue": 3.0 },
-    "z3": { "type": "range", "label": "Storey 3 Height", "min": 0, "max": 15, "step": 0.1, "defaultValue": 6.0 }
+    "widthX": { "type": "range", "label": "Width (X)", "min": 22, "max": 28, "step": 0.5, "defaultValue": 22 },
+    "depthY": { "type": "range", "label": "Depth (Y)", "min": 16, "max": 19, "step": 0.5, "defaultValue": 16 },
+    "h00": { "type": "number", "label": "Level 00 Room Height", "defaultValue": 3.22 },
+    "h01": { "type": "number", "label": "Level 01 Room Height", "defaultValue": 3.22 },
+    "h02": { "type": "number", "label": "Level 02 Room Height", "defaultValue": 3.22 }
   },
   "outputs": {
     "description": "Annotated 3D coordinates"
