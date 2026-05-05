@@ -14,6 +14,10 @@ const useStore = create((set) => ({
     }
   },
 
+  // --- NEW: INTERACTIVE SELECTION STATE ---
+  selectedObject: null,
+  setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
+
   toggleLevel: (levelStr) => set((state) => ({
     visibility: { ...state.visibility, levels: { ...state.visibility.levels, [levelStr]: !state.visibility.levels[levelStr] } }
   })),
@@ -33,8 +37,13 @@ const useStore = create((set) => ({
   }),
 
   setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
-  setPluginOutputs: (data) => set(() => ({ pluginOutputs: data })),
-  clearActivePlugin: () => set(() => ({ activePluginId: null }))
+  
+  setPluginOutputs: (data) => set(() => ({ 
+    pluginOutputs: data,
+    selectedObject: null // Clear selection when generating a new grid!
+  })),
+  
+  clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
 }));
 
 export default useStore;
