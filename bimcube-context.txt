@@ -230,7 +230,7 @@ import useStore from '../../core/store';
 import Viewport3D from './Viewport3D';
 
 export default function RightPane() {
-  const { pluginOutputs, theme, toggleTheme, layers, toggleLayer } = useStore(); 
+  const { pluginOutputs, theme, toggleTheme, visibility, toggleLevel, toggleType, selectedObject, setSelectedObject } = useStore(); 
   const [activeTab, setActiveTab] = useState('3d');
 
   const tabStyle = (isActive) => ({
@@ -238,9 +238,73 @@ export default function RightPane() {
     backgroundColor: isActive ? '#333' : 'transparent', color: isActive ? '#fff' : '#888'
   });
 
-  const layerBtnStyle = (isVisible) => ({
-    background: 'transparent', border: 'none', color: isVisible ? '#4af626' : '#666', cursor: 'pointer', padding: '4px 8px', textAlign: 'left', fontWeight: 'bold', fontSize: '0.85rem'
+  const btnStyle = (isVisible) => ({
+    display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: isVisible ? '#fff' : '#555', cursor: 'pointer', padding: '6px 4px', width: '100%', textAlign: 'left', fontWeight: 'bold', fontSize: '0.8rem', transition: 'all 0.2s'
   });
+
+  const typeColors = { Grid: '#00d1b2', WE01: '#d32f2f', WE02: '#f57c00', WI01: '#795548', WI02: '#9e9e9e', WI03: '#00acc1', SL01: '#8d6e63', SL02: '#bdbdbd' };
+
+  const generateQTO = () => {
+    if (!pluginOutputs || pluginOutputs.renderType !== 'floorplan-grid') {
+      return <div style={{ padding: '2rem', color: theme === 'dark' ? '#888' : '#666', fontFamily: 'monospace' }}>// Generate a floorplan grid...</div>;
+    }
+
+    const qto = {};
+    if (pluginOutputs.slabs) {
+      pluginOutputs.slabs.forEach(slab => {
+        const type = slab.typeId || 'Unknown Slab';
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: true };
+        qto[type].count += 1;
+        qto[type].area += (slab.width * slab.depth);
+        qto[type].volume += (slab.width * slab.depth * slab.height);
+      });
+    }
+
+    if (pluginOutputs.walls) {
+      pluginOutputs.walls.forEach(wall => {
+        const type = wall.typeId || 'Unknown Wall';
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: false };
+        qto[type].count += 1;
+        qto[type].length += wall.length;
+        qto[type].area += (wall.length * wall.height);
+        qto[type].volume += (wall.length * wall.height * wall.thickness);
+      });
+    }
+
+    const cellStyle = { padding: '12px', borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`, textAlign: 'right' };
+    const headerStyle = { ...cellStyle, color: theme === 'dark' ? '#888' : '#666', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' };
+
+    return (
+      <div style={{ padding: '4.5rem 2rem 2rem', color: theme === 'dark' ? '#e0e0e0' : '#111', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+        <h2 style={{ marginBottom: '1.5rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Quantity Takeoff (QTO)</h2>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', backgroundColor: theme === 'dark' ? '#181818' : '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <thead>
+            <tr>
+              <th style={{ ...headerStyle, textAlign: 'left' }}>Element Type</th>
+              <th style={{ ...headerStyle }}>Count</th>
+              <th style={{ ...headerStyle }}>Total Length (m)</th>
+              <th style={{ ...headerStyle }}>Total Area (m²)</th>
+              <th style={{ ...headerStyle }}>Total Volume (m³)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.keys(qto).sort().map(type => (
+              <tr key={type} style={{ transition: 'background 0.2s', ':hover': { backgroundColor: theme === 'dark' ? '#222' : '#f9f9f9' } }}>
+                <td style={{ ...cellStyle, textAlign: 'left', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px' }}></span>
+                  {type}
+                </td>
+                <td style={{ ...cellStyle }}>{qto[type].count}</td>
+                <td style={{ ...cellStyle, color: theme === 'dark' ? '#4af626' : '#008800' }}>{qto[type].isSlab ? '-' : qto[type].length.toFixed(2)}</td>
+                <td style={{ ...cellStyle }}>{qto[type].area.toFixed(2)}</td>
+                <td style={{ ...cellStyle, fontWeight: 'bold' }}>{qto[type].volume.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
     <div style={{ flex: 1, position: 'relative', backgroundColor: theme === 'dark' ? '#121212' : '#f0f0f0', overflow: 'hidden', transition: 'background 0.3s' }}>
@@ -252,25 +316,60 @@ export default function RightPane() {
         <button onClick={toggleTheme} style={{ ...tabStyle(false), marginLeft: '10px', fontSize: '1rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</button>
       </div>
 
-      {/* NEW FLOATING LAYER PANEL */}
+      {/* FILTER PANEL */}
       {activeTab === '3d' && (
-        <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10, backgroundColor: 'rgba(24, 24, 24, 0.8)', padding: '12px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
-          <h4 style={{ margin: '0 0 8px 0', color: '#aaa', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Visibility</h4>
-          <button onClick={() => toggleLayer('grid')} style={layerBtnStyle(layers.grid)}>👁️ Annotation Grid</button>
-          <button onClick={() => toggleLayer('walls')} style={layerBtnStyle(layers.walls)}>👁️ Walls</button>
-          <button onClick={() => toggleLayer('slabs')} style={layerBtnStyle(layers.slabs)}>👁️ Slabs</button>
+        <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10, backgroundColor: 'rgba(20, 20, 20, 0.9)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #333', display: 'flex', flexDirection: 'column', width: '180px', maxHeight: '80vh', overflowY: 'auto' }}>
+          <h4 style={{ margin: '0 0 12px 0', color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #333', paddingBottom: '4px' }}>Project Levels</h4>
+          {[0, 1, 2, 3].map(lvl => (
+            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}><span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}</button>
+          ))}
+          <h4 style={{ margin: '20px 0 12px 0', color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #333', paddingBottom: '4px' }}>Element Types</h4>
+          {Object.keys(visibility.types).map(type => (
+            <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])}>
+              <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type], marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>{type}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* --- 🖱️ NEW PROPERTIES PANEL (Shows when an object is clicked!) --- */}
+      {activeTab === '3d' && selectedObject && (
+        <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', zIndex: 10, backgroundColor: 'rgba(20, 20, 20, 0.95)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #4af626', display: 'flex', flexDirection: 'column', width: '240px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', color: '#fff' }}>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #444', paddingBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: selectedObject.color }}></span>
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>{selectedObject.category}</h3>
+            </div>
+            <button onClick={() => setSelectedObject(null)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>×</button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Type ID:</span> <strong>{selectedObject.typeId}</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Level:</span> <strong>0{selectedObject.level}</strong></div>
+            
+            {/* Logic for Walls vs Slabs */}
+            {selectedObject.category === 'Wall' ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Nodes:</span> <strong>{selectedObject.p1Id} ➔ {selectedObject.p2Id}</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Length:</span> <strong style={{ color: '#4af626' }}>{selectedObject.length.toFixed(2)} m</strong></div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Width:</span> <strong style={{ color: '#4af626' }}>{selectedObject.width.toFixed(2)} m</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Depth:</span> <strong style={{ color: '#4af626' }}>{selectedObject.depth.toFixed(2)} m</strong></div>
+              </>
+            )}
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Height:</span> <strong>{selectedObject.height.toFixed(2)} m</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Thickness:</span> <strong>{(selectedObject.thickness * 1000).toFixed(0)} mm</strong></div>
+          </div>
         </div>
       )}
 
       {/* CANVAS CONTENT */}
       <div style={{ width: '100%', height: '100%' }}>
-        {activeTab === 'data' ? (
-          <pre style={{ margin: 0, width: '100%', height: '100%', backgroundColor: theme === 'dark' ? '#121212' : '#f0f0f0', color: theme === 'dark' ? '#4af626' : '#008800', padding: '4.5rem 1.5rem 1.5rem', overflowY: 'auto', boxSizing: 'border-box', fontSize: '0.9rem' }}>
-            {Object.keys(pluginOutputs).length === 0 ? "// Select a tool..." : JSON.stringify(pluginOutputs, null, 2)}
-          </pre>
-        ) : (
-          <Viewport3D />
-        )}
+        {activeTab === 'data' ? generateQTO() : <Viewport3D />}
       </div>
     </div>
   );
@@ -287,10 +386,15 @@ import useStore from '../../core/store';
 
 export default function Viewport3D() {
   const mountRef = useRef(null);
-  const { pluginOutputs, theme, layers } = useStore(); 
+  
+  // Pull our new selection state into the viewer
+  const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject } = useStore(); 
+  
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
+  const cameraRef = useRef(null);
+  const rendererRef = useRef(null);
 
   useEffect(() => {
     const currentMount = mountRef.current;
@@ -308,10 +412,12 @@ export default function Viewport3D() {
 
     const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
     camera.position.set(20, 15, 20);
+    cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     currentMount.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
     const labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
@@ -332,6 +438,38 @@ export default function Viewport3D() {
     scene.add(group);
     groupRef.current = group;
 
+    // --- 🪄 THE RAYCASTER (Virtual Laser Beam) 🪄 ---
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const onMouseClick = (event) => {
+      // Don't register clicks if we are rotating the camera (simple drag check)
+      if (event.movementX > 2 || event.movementY > 2) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+
+      // Check what the laser hits inside our geometry group
+      const intersects = raycaster.intersectObjects(group.children, true);
+      
+      // Filter out lines and grid dots, only select objects with our custom 'isSelectable' tag
+      const selectableIntersects = intersects.filter(i => i.object.userData?.isSelectable);
+
+      if (selectableIntersects.length > 0) {
+        // Hit! Send the object's data up to the global store
+        useStore.getState().setSelectedObject(selectableIntersects[0].object.userData);
+      } else {
+        // Missed! Clicked on empty space, deselect.
+        useStore.getState().setSelectedObject(null);
+      }
+    };
+
+    // Listen for clicks on the 3D Canvas
+    renderer.domElement.addEventListener('click', onMouseClick);
+
     let animationFrameId;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
@@ -344,6 +482,7 @@ export default function Viewport3D() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
+      renderer.domElement.removeEventListener('click', onMouseClick);
       if (currentMount && currentMount.contains(renderer.domElement)) currentMount.removeChild(renderer.domElement);
       if (currentMount && currentMount.contains(labelRenderer.domElement)) currentMount.removeChild(labelRenderer.domElement);
       renderer.dispose();
@@ -357,7 +496,7 @@ export default function Viewport3D() {
     gridHelperRef.current.material.color.set(theme === 'dark' ? '#555555' : '#aaaaaa');
   }, [theme]);
 
-  // REACTIVE DATA LOOP: Now listens to layers!
+  // REACTIVE DATA LOOP: Building the Geometry & Tagging it!
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -367,49 +506,85 @@ export default function Viewport3D() {
       const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
 
       // 1. GRID LAYER
-      if (layers.grid && pluginOutputs.coordinates) {
+      if (pluginOutputs.coordinates) {
         const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
+        
         pluginOutputs.coordinates.forEach(pt => {
-          const dot = new THREE.Mesh(dotGeom, dotMat);
-          dot.position.set(pt.x, pt.y, pt.z);
-          group.add(dot);
-          const div = document.createElement('div');
-          div.className = 'grid-label';
-          div.textContent = pt.name;
-          const label = new CSS2DObject(div);
-          label.position.set(pt.x, pt.y, pt.z);
-          group.add(label);
+          if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
+            const dot = new THREE.Mesh(dotGeom, dotMat);
+            dot.position.set(pt.x, pt.y, pt.z);
+            group.add(dot);
+            
+            const div = document.createElement('div');
+            div.className = 'grid-label';
+            div.textContent = pt.name;
+            const label = new CSS2DObject(div);
+            label.position.set(pt.x, pt.y, pt.z);
+            group.add(label);
+          }
         });
       }
 
       // 2. SLABS LAYER
-      if (layers.slabs && pluginOutputs.slabs) {
-        pluginOutputs.slabs.forEach(slab => {
-          const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
-          const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8 });
-          const mesh = new THREE.Mesh(geom, mat);
-          mesh.position.set(slab.x, slab.y, slab.z);
-          group.add(mesh);
+      if (pluginOutputs.slabs) {
+        pluginOutputs.slabs.forEach((slab, index) => {
+          if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
+            const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
+            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(slab.x, slab.y, slab.z);
+            
+            // TAG FOR RAYCASTER
+            mesh.userData = { ...slab, id: `slab-${index}`, isSelectable: true, category: 'Slab' };
+            group.add(mesh);
+          }
         });
       }
 
       // 3. WALLS LAYER
-      if (layers.walls && pluginOutputs.walls) {
-        pluginOutputs.walls.forEach(wall => {
-          const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
-          const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8 });
-          const mesh = new THREE.Mesh(geom, mat);
-          mesh.position.set(wall.x, wall.y, wall.z);
-          mesh.rotation.y = wall.rotationY; 
-          const edges = new THREE.EdgesGeometry(geom);
-          const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true }));
-          mesh.add(line);
-          group.add(mesh);
+      if (pluginOutputs.walls) {
+        // 👇 FIX 1: Add 'index' to the forEach loop
+        pluginOutputs.walls.forEach((wall, index) => {
+          if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
+            const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
+            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(wall.x, wall.y, wall.z);
+            mesh.rotation.y = wall.rotationY; 
+            
+            // 👇 FIX 2: Attach a unique 'id' using the index!
+            mesh.userData = { ...wall, id: `wall-${index}`, isSelectable: true, category: 'Wall' };
+
+            const edges = new THREE.EdgesGeometry(geom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true }));
+            mesh.add(line);
+            
+            group.add(mesh);
+          }
         });
       }
     }
-  }, [pluginOutputs, theme, layers]); // Re-render when layers toggle!
+  }, [pluginOutputs, theme, visibility]); 
+
+  // --- 💡 DYNAMIC HIGHLIGHTER (Runs whenever selection changes) ---
+  useEffect(() => {
+    if (!groupRef.current) return;
+    
+    groupRef.current.children.forEach(child => {
+      // Make sure we only touch our selectable walls/slabs
+      if (child.userData?.isSelectable && child.material) {
+        if (selectedObject && child.userData.id === selectedObject.id) {
+          // GLOOOOW BLUE!
+          child.material.emissive.setHex(0x3366ff);
+          child.material.emissiveIntensity = 0.6;
+        } else {
+          // Reset to normal
+          child.material.emissive.setHex(0x000000);
+        }
+      }
+    });
+  }, [selectedObject, pluginOutputs, visibility]); // Re-run if selection or geometry changes
 
   return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />;
 }
@@ -426,6 +601,24 @@ export default function ColorInput({ label, value, onChange }) {
         value={value} 
         onChange={(e) => onChange(e.target.value)} 
         style={{ cursor: 'pointer', border: 'none', width: '32px', height: '32px', padding: 0, borderRadius: '4px', backgroundColor: 'transparent' }} 
+      />
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\components\ui\NumberInput.jsx**
+```text
+export default function NumberInput({ label, value, onChange }) {
+  return (
+    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{label}</span>
+      <input 
+        type="number" 
+        step="0.01"
+        value={value} 
+        onChange={(e) => onChange(Number(e.target.value))} 
+        style={{ width: '80px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#111', color: '#4af626', fontWeight: 'bold', fontFamily: 'monospace', outline: 'none' }} 
       />
     </div>
   );
@@ -465,10 +658,24 @@ const useStore = create((set) => ({
   pluginOutputs: {},  
   theme: 'dark', 
   
-  // --- NEW LAYER STATE ---
-  layers: { grid: true, slabs: true, walls: true },
-  toggleLayer: (layerName) => set((state) => ({
-    layers: { ...state.layers, [layerName]: !state.layers[layerName] }
+  // --- MULTI-DIMENSIONAL VISIBILITY MATRIX ---
+  visibility: {
+    levels: { 0: true, 1: true, 2: true, 3: true },
+    types: {
+      Grid: true, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
+    }
+  },
+
+  // --- NEW: INTERACTIVE SELECTION STATE ---
+  selectedObject: null,
+  setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
+
+  toggleLevel: (levelStr) => set((state) => ({
+    visibility: { ...state.visibility, levels: { ...state.visibility.levels, [levelStr]: !state.visibility.levels[levelStr] } }
+  })),
+
+  toggleType: (typeStr) => set((state) => ({
+    visibility: { ...state.visibility, types: { ...state.visibility.types, [typeStr]: !state.visibility.types[typeStr] } }
   })),
 
   toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
@@ -482,8 +689,13 @@ const useStore = create((set) => ({
   }),
 
   setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
-  setPluginOutputs: (data) => set(() => ({ pluginOutputs: data })),
-  clearActivePlugin: () => set(() => ({ activePluginId: null }))
+  
+  setPluginOutputs: (data) => set(() => ({ 
+    pluginOutputs: data,
+    selectedObject: null // Clear selection when generating a new grid!
+  })),
+  
+  clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
 }));
 
 export default useStore;
@@ -524,76 +736,102 @@ export function compute(inputs) {
 
 **C:\Projects\bimcube\src\plugins\FloorplanGrid\compute.js**
 ```text
+// 1. MATERIAL LIBRARY (With Priority for Auto-Joining)
+// Priority 1 is the highest (Wins corners & T-Intersections)
 const materialTypes = {
     'WE01': { priority: 1, thickness: 0.45, color: '#d32f2f', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WE02': { priority: 3, thickness: 0.40, color: '#f57c00', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI01': { priority: 4, thickness: 0.42, color: '#795548', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI02': { priority: 2, thickness: 0.40, color: '#9e9e9e', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    'WE02': { priority: 2, thickness: 0.40, color: '#f57c00', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    'WI01': { priority: 3, thickness: 0.42, color: '#795548', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    'WI02': { priority: 4, thickness: 0.40, color: '#9e9e9e', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
     'WI03': { priority: 5, thickness: 0.12, color: '#00acc1', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    
     'SL01': { thickness: 0.30, color: '#8d6e63', type: 'slab', zOffsetBottom: 0, zOffsetTop: 0 },    
     'SL02': { thickness: 0.25, color: '#bdbdbd', type: 'slab', zOffsetBottom: 0, zOffsetTop: 0.001 } 
 };
 
+// 2. THE BLUEPRINT (Your exact layout)
 const layoutBlueprint = {
     slabs: [
         { p1: 'Z0-A0', p2: 'Z0-I8', mat: 'SL01' },
         { p1: 'Z0-C3', p2: 'Z0-G5', mat: 'SL02' }
     ],
     walls: [
-        { p1: 'Z0-A0', p2: 'Z0-A8', mat: 'WE01' }, { p1: 'Z0-I8', p2: 'Z0-I0', mat: 'WE01' },
-        { p1: 'Z0-A8', p2: 'Z0-I8', mat: 'WE02' }, { p1: 'Z0-I0', p2: 'Z0-A0', mat: 'WE02' },
-        { p1: 'Z0-A4', p2: 'Z0-C4', mat: 'WI01' }, { p1: 'Z0-G4', p2: 'Z0-I4', mat: 'WI01' },
-        { p1: 'Z0-E0', p2: 'Z0-E1', mat: 'WI01' }, { p1: 'Z0-E7', p2: 'Z0-E8', mat: 'WI01' },
-        { p1: 'Z0-D1', p2: 'Z0-D3', mat: 'WI02' }, { p1: 'Z0-D3', p2: 'Z0-C3', mat: 'WI02' },
-        { p1: 'Z0-C3', p2: 'Z0-C7', mat: 'WI02' }, { p1: 'Z0-C7', p2: 'Z0-F7', mat: 'WI02' },
-        { p1: 'Z0-F7', p2: 'Z0-F5', mat: 'WI02' }, { p1: 'Z0-F5', p2: 'Z0-G5', mat: 'WI02' },
-        { p1: 'Z0-G5', p2: 'Z0-G3', mat: 'WI02' }, { p1: 'Z0-G3', p2: 'Z0-F3', mat: 'WI02' },
-        { p1: 'Z0-F3', p2: 'Z0-F1', mat: 'WI02' }, { p1: 'Z0-F1', p2: 'Z0-D1', mat: 'WI02' },
-        { p1: 'Z0-C0', p2: 'Z0-C2', mat: 'WI03' }, { p1: 'Z0-C2', p2: 'Z0-D2', mat: 'WI03' },
-        { p1: 'Z0-C8', p2: 'Z0-C6', mat: 'WI03' }, { p1: 'Z0-C6', p2: 'Z0-D6', mat: 'WI03' },
-        { p1: 'Z0-F1', p2: 'Z0-G1', mat: 'WI03' }, { p1: 'Z0-G0', p2: 'Z0-G3', mat: 'WI03' },
-        { p1: 'Z0-G5', p2: 'Z0-G8', mat: 'WI03' }, { p1: 'Z0-F7', p2: 'Z0-G7', mat: 'WI03' },
-        { p1: 'Z0-H0', p2: 'Z0-H4', mat: 'WI03' }, { p1: 'Z0-H4', p2: 'Z0-H8', mat: 'WI03' },
+        // --- WE01 (Timber450) - red ---
+        { p1: 'Z0-A0', p2: 'Z0-A8', mat: 'WE01' },
+        { p1: 'Z0-I8', p2: 'Z0-I0', mat: 'WE01' },
+
+        // --- WE02 (Timber400) - orange ---
+        { p1: 'Z0-A8', p2: 'Z0-I8', mat: 'WE02' }, 
+        { p1: 'Z0-I0', p2: 'Z0-A0', mat: 'WE02' },
+
+        // --- WI01 (Timber420) - brown ---
+        { p1: 'Z0-A4', p2: 'Z0-C4', mat: 'WI01' },
+        { p1: 'Z0-G4', p2: 'Z0-I4', mat: 'WI01' },
+        { p1: 'Z0-E0', p2: 'Z0-E1', mat: 'WI01' },
+        { p1: 'Z0-E7', p2: 'Z0-E8', mat: 'WI01' },
+
+        // --- WI02 (ConcreteCore400) - grey ---
+        { p1: 'Z0-D1', p2: 'Z0-D3', mat: 'WI02' },
+        { p1: 'Z0-D3', p2: 'Z0-C3', mat: 'WI02' },
+        { p1: 'Z0-C3', p2: 'Z0-C5', mat: 'WI02' },
+        { p1: 'Z0-C5', p2: 'Z0-C7', mat: 'WI02' },
+        { p1: 'Z0-C7', p2: 'Z0-F7', mat: 'WI02' },
+        { p1: 'Z0-F7', p2: 'Z0-F5', mat: 'WI02' },
+        { p1: 'Z0-F5', p2: 'Z0-G5', mat: 'WI02' },
+        { p1: 'Z0-G5', p2: 'Z0-G3', mat: 'WI02' },
+        { p1: 'Z0-G3', p2: 'Z0-F3', mat: 'WI02' },
+        { p1: 'Z0-F3', p2: 'Z0-F1', mat: 'WI02' },
+        { p1: 'Z0-F1', p2: 'Z0-D1', mat: 'WI02' },
+
+        // --- WI03 (Drywall 120) - green/blueish ---
+        { p1: 'Z0-C0', p2: 'Z0-C2', mat: 'WI03' },
+        { p1: 'Z0-C2', p2: 'Z0-D2', mat: 'WI03' },
+        { p1: 'Z0-C8', p2: 'Z0-C6', mat: 'WI03' },
+        { p1: 'Z0-C6', p2: 'Z0-D6', mat: 'WI03' },
+        { p1: 'Z0-F1', p2: 'Z0-G1', mat: 'WI03' },
+        { p1: 'Z0-G0', p2: 'Z0-G3', mat: 'WI03' },
+        { p1: 'Z0-G5', p2: 'Z0-G8', mat: 'WI03' },
+        { p1: 'Z0-F7', p2: 'Z0-G7', mat: 'WI03' },
+        { p1: 'Z0-H0', p2: 'Z0-H4', mat: 'WI03' },
+        { p1: 'Z0-H4', p2: 'Z0-H8', mat: 'WI03' },
+        
+        // Retaining your manual offsets
         { p1: 'Z0-H1', p2: 'Z0-H4', mat: 'WI03', offsetP1: { x: -1 }, offsetP2: { x: -1 } },
         { p1: 'Z0-H4', p2: 'Z0-H7', mat: 'WI03', offsetP1: { x: -1 }, offsetP2: { x: -1 } }
     ]
 };
 
 export function compute(inputs) {
-    // We now read explicit floor heights instead of absolute sliders!
-    const { widthX, depthY, h00, h01, h02 } = inputs;
+    const { widthX, depthY, z1, z2, z3 } = inputs;
     
-    // Calculate CUMULATIVE Absolute Z Elevations for each level
-    const zLevels = [
-        0,                        // Level 00 (Ground)
-        h00,                      // Level 01
-        h00 + h01,                // Level 02
-        h00 + h01 + h02           // Level 03 (Roof)
-    ];
-
+    // --- 1. GRID GENERATION ---
     const Ex = widthX / 2;
     const B = Ex / 3;
     const uAxis = { 'A': 0, 'B': B, 'C': B + B, 'D': Ex - 2, 'E': Ex, 'F': Ex + 2, 'G': Ex + B, 'H': Ex + B + B, 'I': widthX };
+
     const Ey = depthY / 2;
     const vAxis = { '0': 0, '1': Ey - 3, '2': Ey - 2.2, '3': Ey - 0.5, '4': Ey, '5': Ey + 0.5, '6': Ey + 2.2, '7': Ey + 3, '8': depthY };
 
+    const storeys = [z1, z2, z3];
     const points = [];
     const pointMap = {}; 
 
-    // Generate grid based on cumulative elevations
-    zLevels.forEach((elevation, index) => {
+    storeys.forEach((storeyHeight, index) => {
         for (const [uName, xVal] of Object.entries(uAxis)) {
             for (const [vName, zVal] of Object.entries(vAxis)) {
                 const id = `Z${index}-${uName}${vName}`; 
                 const centeredX = xVal - (widthX / 2);
                 const centeredZ = zVal - (depthY / 2);
-                const pointData = { id, name: `${uName}${vName}`, x: centeredX, y: elevation, z: centeredZ };
+                const pointData = { id, name: `${uName}${vName}`, x: centeredX, y: storeyHeight, z: centeredZ };
                 points.push(pointData);
                 pointMap[id] = pointData; 
             }
         }
     });
 
+    const groundFloorHeight = z2 - z1;
+
+    // --- 2. SLAB GENERATION ---
     const generatedSlabs = layoutBlueprint.slabs.map(slabDef => {
         const p1 = pointMap[slabDef.p1];
         const p2 = pointMap[slabDef.p2];
@@ -609,16 +847,15 @@ export function compute(inputs) {
         return { width, depth, height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color };
     }).filter(Boolean);
 
+
+    // --- 3. 🪄 THE GENIUS AUTO-JOIN WALL ALGORITHM (V2) 🪄 ---
+
+    // Step A: Pre-calculate raw physical geometry for every wall
     const rawWalls = layoutBlueprint.walls.map((wallDef, index) => {
         const p1 = pointMap[wallDef.p1];
         const p2 = pointMap[wallDef.p2];
         const mat = materialTypes[wallDef.mat];
         if (!p1 || !p2) return null;
-
-        // Extract Storey Index intelligently from the grid ID (e.g., "Z0-A1" -> 0)
-        const storeyIdx = parseInt(wallDef.p1.split('-')[0].substring(1));
-        // Wall height is the difference to the next level!
-        const currentFloorHeight = zLevels[storeyIdx + 1] - zLevels[storeyIdx];
 
         const p1X = p1.x + (wallDef.offsetP1?.x || 0);
         const p1Z = p1.z + (wallDef.offsetP1?.z || 0);
@@ -632,30 +869,40 @@ export function compute(inputs) {
 
         return {
             id: `W${index}`, p1Id: wallDef.p1, p2Id: wallDef.p2,
-            p1X, p1Z, p2X, p2Z, dx, dz, length, isHorizontal, mat, currentFloorHeight,
+            p1X, p1Z, p2X, p2Z, dx, dz, length, isHorizontal, mat,
             baseLevel: p1.y + (mat.zOffsetBottom || 0)
         };
     }).filter(Boolean);
 
+    // Step B: Build the Topological Node Map (The T-Intersection Fix)
     const nodeConnections = {}; 
+    
+    // Initialize the map with every explicit endpoint
     rawWalls.forEach(wall => {
         if (!nodeConnections[wall.p1Id]) nodeConnections[wall.p1Id] = [];
         if (!nodeConnections[wall.p2Id]) nodeConnections[wall.p2Id] = [];
     });
 
+    // Helper: Does a specific grid node mathematically lie on the wall's grid line segment?
     const isPointOnGridSegment = (nodeId, wall) => {
         const node = pointMap[nodeId];
         const wP1 = pointMap[wall.p1Id];
         const wP2 = pointMap[wall.p2Id];
+        
+        // Pythagorean distance formula
         const d1 = Math.hypot(node.x - wP1.x, node.z - wP1.z);
         const d2 = Math.hypot(node.x - wP2.x, node.z - wP2.z);
         const lineLen = Math.hypot(wP2.x - wP1.x, wP2.z - wP1.z);
+        
+        // If the distance to the node from both ends equals the total length, the node is ON the line!
         return Math.abs((d1 + d2) - lineLen) < 0.001; 
     };
 
+    // Populate connections: Which walls pass through or touch this node?
     Object.keys(nodeConnections).forEach(nodeId => {
         rawWalls.forEach(wall => {
             if (isPointOnGridSegment(nodeId, wall)) {
+                // Ensure no duplicates
                 if (!nodeConnections[nodeId].some(w => w.id === wall.id)) {
                     nodeConnections[nodeId].push(wall);
                 }
@@ -663,25 +910,29 @@ export function compute(inputs) {
         });
     });
 
+    // Step C: Resolve the Intersections!
     const winsCorner = (wallA, wallB) => {
-        if (wallA.mat.priority < wallB.mat.priority) return true; 
+        if (wallA.mat.priority < wallB.mat.priority) return true; // Lower number wins!
         if (wallA.mat.priority > wallB.mat.priority) return false; 
-        return wallA.isHorizontal; 
+        return wallA.isHorizontal; // Tie breaker
     };
 
     const generatedWalls = rawWalls.map(wall => {
         let p1Extension = 0;
         let p2Extension = 0;
 
+        // Check Start Node (P1)
         const p1Competitors = nodeConnections[wall.p1Id].filter(w => w.id !== wall.id);
         if (p1Competitors.length > 0) {
             let dominantWall = p1Competitors[0];
             for (let i = 1; i < p1Competitors.length; i++) {
                 if (winsCorner(p1Competitors[i], dominantWall)) dominantWall = p1Competitors[i];
             }
+            // If we win, we push outward. If we lose, we shrink inward.
             p1Extension = winsCorner(wall, dominantWall) ? (dominantWall.mat.thickness / 2) : -(dominantWall.mat.thickness / 2);
         }
 
+        // Check End Node (P2)
         const p2Competitors = nodeConnections[wall.p2Id].filter(w => w.id !== wall.id);
         if (p2Competitors.length > 0) {
             let dominantWall = p2Competitors[0];
@@ -691,18 +942,20 @@ export function compute(inputs) {
             p2Extension = winsCorner(wall, dominantWall) ? (dominantWall.mat.thickness / 2) : -(dominantWall.mat.thickness / 2);
         }
 
+        // Apply mathematical extensions to physical endpoints
         const finalLength = wall.length + p1Extension + p2Extension;
+        
         const dirX = wall.dx / wall.length;
         const dirZ = wall.dz / wall.length;
         const newP1X = wall.p1X - (dirX * p1Extension);
         const newP1Z = wall.p1Z - (dirZ * p1Extension);
         const newP2X = wall.p2X + (dirX * p2Extension);
         const newP2Z = wall.p2Z + (dirZ * p2Extension);
+        
         const midX = (newP1X + newP2X) / 2;
         const midZ = (newP1Z + newP2Z) / 2;
 
-        // Apply specific floor height dynamically calculated above!
-        const topLevel = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
+        const topLevel = wall.baseLevel + groundFloorHeight + (wall.mat.zOffsetTop || 0);
         const midY = wall.baseLevel + ((topLevel - wall.baseLevel) / 2);
         const rotationY = -Math.atan2(wall.dz, wall.dx);
 
@@ -713,7 +966,7 @@ export function compute(inputs) {
     });
 
     return {
-        description: `Cumulative Elevations & Layers`,
+        description: `Auto-Joined Parametric Layout`,
         renderType: 'floorplan-grid', 
         dimensions: { widthX, depthY },
         coordinates: points,
@@ -731,8 +984,8 @@ export function compute(inputs) {
   "version": "1.1.0",
   "description": "Multi-storey parametric grid with cumulative Z-heights.",
   "inputs": {
-    "widthX": { "type": "range", "label": "Width (X)", "min": 22, "max": 50, "step": 0.5, "defaultValue": 22 },
-    "depthY": { "type": "range", "label": "Depth (Y)", "min": 16, "max": 50, "step": 0.5, "defaultValue": 16 },
+    "widthX": { "type": "range", "label": "Width (X)", "min": 22, "max": 28, "step": 0.5, "defaultValue": 22 },
+    "depthY": { "type": "range", "label": "Depth (Y)", "min": 16, "max": 19, "step": 0.5, "defaultValue": 16 },
     "h00": { "type": "number", "label": "Level 00 Room Height", "defaultValue": 3.22 },
     "h01": { "type": "number", "label": "Level 01 Room Height", "defaultValue": 3.22 },
     "h02": { "type": "number", "label": "Level 02 Room Height", "defaultValue": 3.22 }
@@ -740,24 +993,6 @@ export function compute(inputs) {
   "outputs": {
     "description": "Annotated 3D coordinates"
   }
-}
-```
-
-**C:\Projects\bimcube\src\plugins\GridGenerator\NumberInput.jsx**
-```text
-export default function NumberInput({ label, value, onChange }) {
-  return (
-    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{label}</span>
-      <input 
-        type="number" 
-        step="0.01"
-        value={value} 
-        onChange={(e) => onChange(Number(e.target.value))} 
-        style={{ width: '80px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#111', color: '#4af626', fontWeight: 'bold', fontFamily: 'monospace', outline: 'none' }} 
-      />
-    </div>
-  );
 }
 ```
 
