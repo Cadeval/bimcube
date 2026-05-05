@@ -10,11 +10,12 @@ const useStore = create((set) => ({
   visibility: {
     levels: { 0: true, 1: true, 2: true, 3: true },
     types: {
-      Grid: true, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
+      // 👇 CHANGED: Grid is now set to false by default!
+      Grid: false, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
     }
   },
 
-  // --- NEW: INTERACTIVE SELECTION STATE ---
+  // --- INTERACTIVE SELECTION STATE ---
   selectedObject: null,
   setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
 
@@ -40,7 +41,7 @@ const useStore = create((set) => ({
   
   setPluginOutputs: (data) => set(() => ({ 
     pluginOutputs: data,
-    selectedObject: null // Clear selection when generating a new grid!
+    selectedObject: null // Clear selection when generating a new layout!
   })),
   
   clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
