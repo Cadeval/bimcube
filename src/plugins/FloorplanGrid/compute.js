@@ -19,6 +19,9 @@ export function compute(inputs) {
     const typeColors = { 'Grid': '#00d1b2' };
 
     zLevels.forEach((elevation, index) => {
+
+        uniqueLevels.add(index);
+        
         for (const [uName, xVal] of Object.entries(uAxis)) {
             for (const [vName, zVal] of Object.entries(vAxis)) {
                 const id = `Z${index}-${uName}${vName}`; 
