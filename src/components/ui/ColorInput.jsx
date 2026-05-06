@@ -1,7 +1,10 @@
+import useStore from '../../core/store';
+
 export default function ColorInput({ label, value, onChange }) {
+  const { theme } = useStore();
   return (
-    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{label}</span>
+    <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.75rem', color: theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>{label}</span>
       <input 
         type="color" 
         value={value} 
