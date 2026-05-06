@@ -3,9 +3,10 @@ import useStore from '../../core/store';
 import Viewport3D from './Viewport3D';
 
 export default function RightPane() {
-  const { pluginOutputs, theme, toggleTheme, visibility, toggleLevel, toggleType, activePluginId } = useStore(); 
+  const { pluginOutputs, theme, toggleTheme, visibility, toggleLevel, toggleType, activePluginId, clipping, setClipping } = useStore(); 
   const [activeTab, setActiveTab] = useState('3d');
   const [isVisibilityOpen, setIsVisibilityOpen] = useState(false);
+  const [isSectionOpen, setIsSectionOpen] = useState(false); // 🪄 New state for Section tool
 
   const isDark = theme === 'dark';
   const isMenuOpen = !!activePluginId;
@@ -18,7 +19,6 @@ export default function RightPane() {
   const dimCol = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
   const hoverBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
 
-  // 🪄 DYNAMIC COLORS & LEVELS
   const typeColors = pluginOutputs?.meta?.colors || { Grid: '#00d1b2' };
   const availableLevels = pluginOutputs?.meta?.levels || [0, 1, 2, 3];
 
@@ -69,35 +69,77 @@ export default function RightPane() {
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: isDark ? '#121212' : '#f5f5f5', overflow: 'hidden', transition: 'background 0.3s' }}>
+      
+      {/* 🪄 TABS & ICONS HEADER */}
       <div style={{ position: 'absolute', top: '1rem', left: `${leftOffset + 32}px`, transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)', zIndex: 30, display: 'flex', flexWrap: 'wrap', gap: '4px', backgroundColor: bgGlass, padding: '4px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}` }}>
         <button onClick={() => setActiveTab('3d')} style={tabStyle(activeTab === '3d')}>🧊 3D</button>
         <button onClick={() => setActiveTab('data')} style={tabStyle(activeTab === 'data')}>📊 CSV</button>
         <button onClick={toggleTheme} style={{ ...tabStyle(false), marginLeft: '4px', fontSize: '1rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</button>
-        {activeTab === '3d' && <button onClick={() => setIsVisibilityOpen(!isVisibilityOpen)} style={{ ...tabStyle(isVisibilityOpen), marginLeft: '4px', borderLeft: `1px solid ${borderCol}`, paddingLeft: '1rem', borderRadius: '0 6px 6px 0' }}>👁️ Layers</button>}
+        
+        {activeTab === '3d' && (
+          <>
+            <button onClick={() => { setIsVisibilityOpen(!isVisibilityOpen); setIsSectionOpen(false); }} style={{ ...tabStyle(isVisibilityOpen), marginLeft: '4px', borderLeft: `1px solid ${borderCol}`, paddingLeft: '1rem', borderRadius: '0' }}>
+              👁️ Layers
+            </button>
+            <button onClick={() => { setIsSectionOpen(!isSectionOpen); setIsVisibilityOpen(false); }} style={{ ...tabStyle(isSectionOpen), borderRadius: '0 6px 6px 0', color: clipping.enabled ? '#4af626' : dimCol }}>
+              ✂️ Section
+            </button>
+          </>
+        )}
       </div>
 
+      {/* VISIBILITY PANEL */}
       {activeTab === '3d' && isVisibilityOpen && (
-        <div style={{ position: 'absolute', top: '4.5rem', right: '1rem', zIndex: 20, backgroundColor: bgSolid, padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', width: '180px', maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+        <div style={{ position: 'absolute', top: '4.5rem', left: `${leftOffset + 32}px`, zIndex: 20, backgroundColor: bgSolid, padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', width: '200px', maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: `1px solid ${borderCol}`, paddingBottom: '8px' }}>
             <h4 style={{ margin: 0, color: dimCol, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Visibility</h4>
             <button onClick={() => setIsVisibilityOpen(false)} style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', padding: 0 }}>✕</button>
           </div>
-          
           <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Project Levels</h4>
-          {/* 🪄 DYNAMIC LEVELS */}
           {[...availableLevels].map(lvl => (
-            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}>
-              <span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}
-            </button>
+            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}><span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}</button>
           ))}
-          
           <h4 style={{ margin: '16px 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Element Types</h4>
-          {/* 🪄 DYNAMIC TYPES & BADGES */}
           {Object.keys(visibility.types).sort().map(type => (
-            <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])}>
-              <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>{type}
-            </button>
+            <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])}><span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>{type}</button>
           ))}
+        </div>
+      )}
+
+      {/* 🪄 SECTIONING PANEL */}
+      {activeTab === '3d' && isSectionOpen && (
+        <div style={{ position: 'absolute', top: '4.5rem', left: `${leftOffset + 32}px`, zIndex: 20, backgroundColor: bgSolid, padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', width: '240px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: `1px solid ${borderCol}`, paddingBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: dimCol, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Live Sectioning</h4>
+            <button onClick={() => setIsSectionOpen(false)} style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', padding: 0 }}>✕</button>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <span style={{ fontSize: '0.8rem', color: txtCol, fontWeight: 'bold' }}>Enable Cut</span>
+            <input type="checkbox" checked={clipping.enabled} onChange={(e) => setClipping({ enabled: e.target.checked })} style={{ cursor: 'pointer', accentColor: '#4af626' }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
+            {['y', 'x', 'z'].map(axis => (
+              <button 
+                key={axis} onClick={() => setClipping({ axis })} 
+                style={{ flex: 1, padding: '6px', borderRadius: '4px', border: `1px solid ${borderCol}`, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem', backgroundColor: clipping.axis === axis ? (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)') : 'transparent', color: clipping.axis === axis ? txtCol : dimCol }}
+              >
+                {axis.toUpperCase()} Cut
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.75rem', color: dimCol }}>
+            <span>Distance</span><span style={{ color: txtCol, fontWeight: 'bold' }}>{clipping.distance.toFixed(1)}m</span>
+          </div>
+          {/* Dynamic slider based on axis. Y cuts vertically, X/Z cut horizontally */}
+          <input 
+            type="range" min={clipping.axis === 'y' ? -5 : -25} max={clipping.axis === 'y' ? 15 : 25} step="0.1" value={clipping.distance} 
+            onChange={(e) => setClipping({ distance: Number(e.target.value) })} 
+            style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626', height: '4px', opacity: clipping.enabled ? 1 : 0.3 }} 
+            disabled={!clipping.enabled}
+          />
         </div>
       )}
 

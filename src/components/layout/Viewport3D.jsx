@@ -6,13 +6,19 @@ import useStore from '../../core/store';
 
 export default function Viewport3D() {
   const mountRef = useRef(null);
-  const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject } = useStore(); 
+  
+  // 🪄 Pull in the clipping state!
+  const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject, clipping } = useStore(); 
   
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
+  const rendererRef = useRef(null); // Save renderer to dynamically toggle clipping
+
+  // 🪄 Create ONE persistent infinite math plane. (Starts facing down along Y-axis at 1.5m)
+  const clipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5));
 
   useEffect(() => {
     const currentMount = mountRef.current;
@@ -33,6 +39,8 @@ export default function Viewport3D() {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    renderer.localClippingEnabled = clipping.enabled; // Enable clipping engine!
+    rendererRef.current = renderer;
     currentMount.appendChild(renderer.domElement);
 
     const labelRenderer = new CSS2DRenderer();
@@ -102,26 +110,34 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🪄 Light/Dark Mode Grid & Background Update
+  // 🪄 LIVE SECTIONING EFFECT (Runs every time you touch the slider, without rebuilding geometry!)
+  useEffect(() => {
+    if (!rendererRef.current) return;
+    
+    rendererRef.current.localClippingEnabled = clipping.enabled;
+
+    // Flip the infinite plane to match the chosen axis
+    if (clipping.axis === 'y') clipPlaneRef.current.normal.set(0, -1, 0); // Top Down
+    else if (clipping.axis === 'x') clipPlaneRef.current.normal.set(-1, 0, 0); // Side cut
+    else if (clipping.axis === 'z') clipPlaneRef.current.normal.set(0, 0, -1); // Front cut
+
+    // Move the plane!
+    clipPlaneRef.current.constant = clipping.distance;
+  }, [clipping]);
+
   useEffect(() => {
     if (!sceneRef.current) return;
-    
     sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#f5f5f5');
-    
-    if (gridHelperRef.current) {
-      sceneRef.current.remove(gridHelperRef.current);
-    }
+    if (gridHelperRef.current) sceneRef.current.remove(gridHelperRef.current);
     
     const mainColor = theme === 'dark' ? '#555555' : '#ffffff';
     const subColor = theme === 'dark' ? '#444444' : '#e0e0e0';
-    
     const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
     gridHelperRef.current = gridHelper;
     sceneRef.current.add(gridHelper);
-    
   }, [theme]);
 
-  // Geometry Generation Loop
+  // Geometry Generation
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -130,9 +146,12 @@ export default function Viewport3D() {
     if (pluginOutputs.renderType === 'floorplan-grid') {
       const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
 
+      // 🪄 Attach the math plane to EVERY material so it knows how to cut!
+      const clipPlanes = [clipPlaneRef.current];
+
       if (pluginOutputs.coordinates) {
         const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-        const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
+        const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2', clippingPlanes: clipPlanes });
         pluginOutputs.coordinates.forEach(pt => {
           if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
             const dot = new THREE.Mesh(dotGeom, dotMat);
@@ -150,7 +169,7 @@ export default function Viewport3D() {
         pluginOutputs.slabs.forEach((slab, index) => {
           if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
             const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
-            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8 });
+            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8, clippingPlanes: clipPlanes });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(slab.x, slab.y, slab.z);
             mesh.userData = { ...slab, id: `slab-${index}`, isSelectable: true, category: 'Slab' };
@@ -163,13 +182,13 @@ export default function Viewport3D() {
         pluginOutputs.walls.forEach((wall, index) => {
           if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
             const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
-            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8 });
+            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8, clippingPlanes: clipPlanes });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(wall.x, wall.y, wall.z);
             mesh.rotation.y = wall.rotationY; 
             mesh.userData = { ...wall, id: `wall-${index}`, isSelectable: true, category: 'Wall' };
             const edges = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true }));
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true, clippingPlanes: clipPlanes }));
             mesh.add(line);
             group.add(mesh);
           }
@@ -178,19 +197,18 @@ export default function Viewport3D() {
 
       if (pluginOutputs.openings) {
         pluginOutputs.openings.forEach((opening, index) => {
-          // 🪄 THE FIX IS HERE: Added && visibility.types[opening.typeId]
           if (visibility.levels[opening.level] && visibility.types[opening.typeId]) {
             const geom = new THREE.BoxGeometry(opening.width, opening.height, opening.depth);
             const mat = new THREE.MeshStandardMaterial({ 
               color: opening.color, roughness: opening.opacity < 1 ? 0.1 : 0.8, metalness: opening.opacity < 1 ? 0.8 : 0.1,
-              transparent: opening.opacity < 1, opacity: opening.opacity
+              transparent: opening.opacity < 1, opacity: opening.opacity, clippingPlanes: clipPlanes
             });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(opening.x, opening.y, opening.z);
             mesh.rotation.y = opening.rotationY; 
             mesh.userData = { ...opening, id: `opening-${index}`, isSelectable: true };
             const edges = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.5, transparent: true }));
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.5, transparent: true, clippingPlanes: clipPlanes }));
             mesh.add(line);
             group.add(mesh);
           }
@@ -214,18 +232,14 @@ export default function Viewport3D() {
     });
   }, [selectedObject, pluginOutputs, visibility]);
 
-  // --- 🪄 CAMERA & NAVIGATION MATH ENGINE 🪄 ---
   const fitCameraToBox = (box) => {
     if (!cameraRef.current || !controlsRef.current) return;
-    
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-    
     const maxSize = Math.max(size.x, size.y, size.z);
     const fitHeightDistance = maxSize / (2 * Math.atan((Math.PI * cameraRef.current.fov) / 360));
     const fitWidthDistance = fitHeightDistance / cameraRef.current.aspect;
     const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
-
     const direction = controlsRef.current.target.clone().sub(cameraRef.current.position).normalize().multiplyScalar(distance);
     controlsRef.current.target.copy(center);
     cameraRef.current.position.copy(controlsRef.current.target).sub(direction);
@@ -241,15 +255,11 @@ export default function Viewport3D() {
   const handleZoomSelected = () => {
     if (!selectedObject || !groupRef.current) return;
     const selectedMesh = groupRef.current.children.find(child => child.userData?.id === selectedObject.id);
-    if (selectedMesh) {
-      const box = new THREE.Box3().setFromObject(selectedMesh);
-      fitCameraToBox(box);
-    }
+    if (selectedMesh) fitCameraToBox(new THREE.Box3().setFromObject(selectedMesh));
   };
 
   const handleSetView = (viewType) => {
     if (!cameraRef.current || !controlsRef.current || !groupRef.current) return;
-    
     const box = new THREE.Box3().setFromObject(groupRef.current);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
@@ -266,7 +276,6 @@ export default function Viewport3D() {
     cameraRef.current.updateProjectionMatrix();
   };
 
-  // 🪄 NAVIGATION TOOLBAR STYLES (Responsive to Light Mode)
   const isDark = theme === 'dark';
   const toolbarStyle = {
     position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
@@ -282,24 +291,19 @@ export default function Viewport3D() {
 
   return (
     <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      
       <div style={toolbarStyle}>
         <button onClick={() => handleSetView('top')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Top</button>
         <button onClick={() => handleSetView('front')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Front</button>
         <button onClick={() => handleSetView('left')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Left</button>
         <button onClick={() => handleSetView('iso')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Iso</button>
-        
         <div style={{ width: '1px', backgroundColor: isDark ? '#444' : '#ccc', margin: '0 4px' }} />
-        
         <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>🔍 Fit All</button>
-        
         {selectedObject && (
           <button onClick={handleZoomSelected} style={{...btnStyle, color: '#3366ff'}} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
             🎯 Fit Selected
           </button>
         )}
       </div>
-
     </div>
   );
 }

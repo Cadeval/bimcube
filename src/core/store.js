@@ -6,7 +6,6 @@ const useStore = create((set) => ({
   pluginOutputs: {},  
   theme: 'dark', 
   
-  // 🪄 Now completely dynamic! Starts empty.
   visibility: {
     levels: {},
     types: {}
@@ -14,6 +13,10 @@ const useStore = create((set) => ({
 
   selectedObject: null,
   setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
+
+  // 🪄 NEW: LIVE GPU SECTIONING STATE
+  clipping: { enabled: false, axis: 'y', distance: 1.5 }, // 1.5m is a standard architectural floorplan cut height
+  setClipping: (updates) => set((state) => ({ clipping: { ...state.clipping, ...updates } })),
 
   toggleLevel: (levelStr) => set((state) => ({
     visibility: { ...state.visibility, levels: { ...state.visibility.levels, [levelStr]: !state.visibility.levels[levelStr] } }
@@ -36,27 +39,15 @@ const useStore = create((set) => ({
   setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
   
   setPluginOutputs: (data) => set((state) => {
-    // 🪄 AUTO-DISCOVERY: Find all new layers and levels from the JSON!
     const newLevels = { ...state.visibility.levels };
     const newTypes = { ...state.visibility.types };
 
     if (data.meta) {
-       data.meta.levels.forEach(lvl => {
-         if (newLevels[lvl] === undefined) newLevels[lvl] = true;
-       });
-       data.meta.types.forEach(type => {
-         if (newTypes[type] === undefined) {
-             // Default 'Grid' to false, everything else to true
-             newTypes[type] = type === 'Grid' ? false : true;
-         }
-       });
+       data.meta.levels.forEach(lvl => { if (newLevels[lvl] === undefined) newLevels[lvl] = true; });
+       data.meta.types.forEach(type => { if (newTypes[type] === undefined) newTypes[type] = type === 'Grid' ? false : true; });
     }
 
-    return { 
-      pluginOutputs: data,
-      visibility: { levels: newLevels, types: newTypes },
-      selectedObject: null 
-    };
+    return { pluginOutputs: data, visibility: { levels: newLevels, types: newTypes }, selectedObject: null };
   }),
   
   clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
