@@ -1,0 +1,10 @@
+git add .
+git commit -m "B42"
+git push
+npm run deploy
+
+---
+
+npm run dev
+
+----

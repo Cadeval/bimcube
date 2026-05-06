@@ -6,15 +6,14 @@ import useStore from '../../core/store';
 
 export default function Viewport3D() {
   const mountRef = useRef(null);
-  
-  // Pull our new selection state into the viewer
   const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject } = useStore(); 
   
+  // 🪄 NEW: We need persistent references to the camera and controls for our buttons to use!
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
   const cameraRef = useRef(null);
-  const rendererRef = useRef(null);
+  const controlsRef = useRef(null);
 
   useEffect(() => {
     const currentMount = mountRef.current;
@@ -32,12 +31,11 @@ export default function Viewport3D() {
 
     const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
     camera.position.set(20, 15, 20);
-    cameraRef.current = camera;
+    cameraRef.current = camera; // Save to ref
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     currentMount.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
 
     const labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
@@ -49,6 +47,7 @@ export default function Viewport3D() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controlsRef.current = controls; // Save to ref
 
     const gridHelper = new THREE.GridHelper(50, 50, '#555555', '#444444');
     gridHelperRef.current = gridHelper;
@@ -58,36 +57,26 @@ export default function Viewport3D() {
     scene.add(group);
     groupRef.current = group;
 
-    // --- 🪄 THE RAYCASTER (Virtual Laser Beam) 🪄 ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
     const onMouseClick = (event) => {
-      // Don't register clicks if we are rotating the camera (simple drag check)
       if (event.movementX > 2 || event.movementY > 2) return;
-
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
       raycaster.setFromCamera(mouse, camera);
 
-      // Check what the laser hits inside our geometry group
       const intersects = raycaster.intersectObjects(group.children, true);
-      
-      // Filter out lines and grid dots, only select objects with our custom 'isSelectable' tag
       const selectableIntersects = intersects.filter(i => i.object.userData?.isSelectable);
 
       if (selectableIntersects.length > 0) {
-        // Hit! Send the object's data up to the global store
         useStore.getState().setSelectedObject(selectableIntersects[0].object.userData);
       } else {
-        // Missed! Clicked on empty space, deselect.
         useStore.getState().setSelectedObject(null);
       }
     };
 
-    // Listen for clicks on the 3D Canvas
     renderer.domElement.addEventListener('click', onMouseClick);
 
     let animationFrameId;
@@ -99,10 +88,19 @@ export default function Viewport3D() {
     };
     animate();
 
+    const handleResize = () => {
+      camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+      labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
       renderer.domElement.removeEventListener('click', onMouseClick);
+      window.removeEventListener('resize', handleResize);
       if (currentMount && currentMount.contains(renderer.domElement)) currentMount.removeChild(renderer.domElement);
       if (currentMount && currentMount.contains(labelRenderer.domElement)) currentMount.removeChild(labelRenderer.domElement);
       renderer.dispose();
@@ -116,7 +114,7 @@ export default function Viewport3D() {
     gridHelperRef.current.material.color.set(theme === 'dark' ? '#555555' : '#aaaaaa');
   }, [theme]);
 
-  // REACTIVE DATA LOOP: Building the Geometry & Tagging it!
+  // Geometry Generation Loop
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -125,28 +123,22 @@ export default function Viewport3D() {
     if (pluginOutputs.renderType === 'floorplan-grid') {
       const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
 
-      // 1. GRID LAYER
       if (pluginOutputs.coordinates) {
         const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
-        
         pluginOutputs.coordinates.forEach(pt => {
           if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
             const dot = new THREE.Mesh(dotGeom, dotMat);
             dot.position.set(pt.x, pt.y, pt.z);
             group.add(dot);
-            
             const div = document.createElement('div');
-            div.className = 'grid-label';
-            div.textContent = pt.name;
-            const label = new CSS2DObject(div);
-            label.position.set(pt.x, pt.y, pt.z);
+            div.className = 'grid-label'; div.textContent = pt.name;
+            const label = new CSS2DObject(div); label.position.set(pt.x, pt.y, pt.z);
             group.add(label);
           }
         });
       }
 
-      // 2. SLABS LAYER
       if (pluginOutputs.slabs) {
         pluginOutputs.slabs.forEach((slab, index) => {
           if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
@@ -154,17 +146,13 @@ export default function Viewport3D() {
             const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8 });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(slab.x, slab.y, slab.z);
-            
-            // TAG FOR RAYCASTER
             mesh.userData = { ...slab, id: `slab-${index}`, isSelectable: true, category: 'Slab' };
             group.add(mesh);
           }
         });
       }
 
-      // 3. WALLS LAYER
       if (pluginOutputs.walls) {
-        // 👇 FIX 1: Add 'index' to the forEach loop
         pluginOutputs.walls.forEach((wall, index) => {
           if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
             const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
@@ -172,14 +160,30 @@ export default function Viewport3D() {
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(wall.x, wall.y, wall.z);
             mesh.rotation.y = wall.rotationY; 
-            
-            // 👇 FIX 2: Attach a unique 'id' using the index!
             mesh.userData = { ...wall, id: `wall-${index}`, isSelectable: true, category: 'Wall' };
-
             const edges = new THREE.EdgesGeometry(geom);
             const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true }));
             mesh.add(line);
-            
+            group.add(mesh);
+          }
+        });
+      }
+
+      if (pluginOutputs.openings) {
+        pluginOutputs.openings.forEach((opening, index) => {
+          if (visibility.levels[opening.level]) {
+            const geom = new THREE.BoxGeometry(opening.width, opening.height, opening.depth);
+            const mat = new THREE.MeshStandardMaterial({ 
+              color: opening.color, roughness: opening.opacity < 1 ? 0.1 : 0.8, metalness: opening.opacity < 1 ? 0.8 : 0.1,
+              transparent: opening.opacity < 1, opacity: opening.opacity
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(opening.x, opening.y, opening.z);
+            mesh.rotation.y = opening.rotationY; 
+            mesh.userData = { ...opening, id: `opening-${index}`, isSelectable: true };
+            const edges = new THREE.EdgesGeometry(geom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.5, transparent: true }));
+            mesh.add(line);
             group.add(mesh);
           }
         });
@@ -187,24 +191,114 @@ export default function Viewport3D() {
     }
   }, [pluginOutputs, theme, visibility]); 
 
-  // --- 💡 DYNAMIC HIGHLIGHTER (Runs whenever selection changes) ---
+  // Highlighter Logic
   useEffect(() => {
     if (!groupRef.current) return;
-    
     groupRef.current.children.forEach(child => {
-      // Make sure we only touch our selectable walls/slabs
       if (child.userData?.isSelectable && child.material) {
         if (selectedObject && child.userData.id === selectedObject.id) {
-          // GLOOOOW BLUE!
           child.material.emissive.setHex(0x3366ff);
           child.material.emissiveIntensity = 0.6;
         } else {
-          // Reset to normal
           child.material.emissive.setHex(0x000000);
         }
       }
     });
-  }, [selectedObject, pluginOutputs, visibility]); // Re-run if selection or geometry changes
+  }, [selectedObject, pluginOutputs, visibility]);
 
-  return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />;
+  // --- 🪄 CAMERA & NAVIGATION MATH ENGINE 🪄 ---
+  const fitCameraToBox = (box) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    
+    // Calculate the distance required to fit the box based on Camera FOV
+    const maxSize = Math.max(size.x, size.y, size.z);
+    const fitHeightDistance = maxSize / (2 * Math.atan((Math.PI * cameraRef.current.fov) / 360));
+    const fitWidthDistance = fitHeightDistance / cameraRef.current.aspect;
+    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance); // 1.2 adds a nice margin
+
+    // Move camera and target
+    const direction = controlsRef.current.target.clone().sub(cameraRef.current.position).normalize().multiplyScalar(distance);
+    controlsRef.current.target.copy(center);
+    cameraRef.current.position.copy(controlsRef.current.target).sub(direction);
+    cameraRef.current.updateProjectionMatrix();
+  };
+
+  const handleZoomAll = () => {
+    if (!groupRef.current || groupRef.current.children.length === 0) return;
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    fitCameraToBox(box);
+  };
+
+  const handleZoomSelected = () => {
+    if (!selectedObject || !groupRef.current) return;
+    // Find the specific mesh that matches our selected object
+    const selectedMesh = groupRef.current.children.find(child => child.userData?.id === selectedObject.id);
+    if (selectedMesh) {
+      const box = new THREE.Box3().setFromObject(selectedMesh);
+      fitCameraToBox(box);
+    }
+  };
+
+  const handleSetView = (viewType) => {
+    if (!cameraRef.current || !controlsRef.current || !groupRef.current) return;
+    
+    // Find center of the entire building
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const distance = maxDim * 1.5;
+
+    // Set the target to the center of the building
+    controlsRef.current.target.copy(center);
+
+    // Jump camera to specific axis
+    if (viewType === 'top') cameraRef.current.position.set(center.x, center.y + distance, center.z + 0.1); // slight offset to prevent gimbal lock
+    if (viewType === 'front') cameraRef.current.position.set(center.x, center.y, center.z + distance);
+    if (viewType === 'left') cameraRef.current.position.set(center.x - distance, center.y, center.z);
+    if (viewType === 'iso') cameraRef.current.position.set(center.x + distance, center.y + distance, center.z + distance);
+    
+    cameraRef.current.updateProjectionMatrix();
+  };
+
+  // UI Styles
+  const toolbarStyle = {
+    position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+    backgroundColor: theme === 'dark' ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.75)',
+    backdropFilter: 'blur(10px)', border: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`,
+    borderRadius: '8px', display: 'flex', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+  };
+
+  const btnStyle = {
+    background: 'transparent', border: 'none', color: theme === 'dark' ? '#aaa' : '#555', cursor: 'pointer',
+    padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s'
+  };
+
+  return (
+    <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+      
+      {/* 🪄 NEW: FLOATING NAVIGATION TOOLBAR */}
+      <div style={toolbarStyle}>
+        <button onClick={() => handleSetView('top')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Top</button>
+        <button onClick={() => handleSetView('front')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Front</button>
+        <button onClick={() => handleSetView('left')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Left</button>
+        <button onClick={() => handleSetView('iso')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Iso</button>
+        
+        <div style={{ width: '1px', backgroundColor: theme === 'dark' ? '#444' : '#ccc', margin: '0 4px' }} />
+        
+        <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>All</button>
+        
+        {/* Only show "Zoom Selected" if an object is actively clicked! */}
+        {selectedObject && (
+          <button onClick={handleZoomSelected} style={{...btnStyle, color: '#3366ff'}} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
+            🎯 Fit Selected
+          </button>
+        )}
+      </div>
+
+    </div>
+  );
 }

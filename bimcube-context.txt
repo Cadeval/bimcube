@@ -121,30 +121,45 @@ createRoot(document.getElementById('root')).render(
 
 **C:\Projects\bimcube\src\components\layout\LeftPane.jsx**
 ```text
+import { useEffect } from 'react';
 import useStore from '../../core/store';
 
-// 1. Import your tool contracts
-import gridManifest from '../../plugins/GridGenerator/manifest.json';
-import boxManifest from '../../plugins/BoxGenerator/manifest.json';
+// 1. Import ONLY your master Floorplan tool
 import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 
-// 2. The Tool Registry Array (Typo Fixed Here!)
-const tools = [gridManifest, boxManifest, floorplanManifest];
+// 2. The Tool Registry Array
+const tools = [floorplanManifest];
 
 export default function LeftPane() {
   const { activePluginId, setActivePlugin, clearActivePlugin } = useStore();
 
-  return (
-    <div style={{ width: '60px', backgroundColor: '#181818', borderRight: '1px solid #2a2a2a', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem 0', zIndex: 20 }}>
-      
-      <div style={{ color: '#fff', fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem' }}>BC</div>
+  // 🪄 NEW: Auto-activate the Floorplan tool when the app loads!
+  useEffect(() => {
+    if (!activePluginId) {
+      setActivePlugin(floorplanManifest);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      {/* 3. Loop through the tools and auto-generate the buttons! */}
-      {tools.map((manifest, index) => {
+  return (
+    <div style={{ 
+      width: '60px', 
+      backgroundColor: 'rgba(24, 24, 24, 0.65)', 
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)', 
+      borderRight: '1px solid rgba(255, 255, 255, 0.05)', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      padding: '1.5rem 0', 
+      zIndex: 20 
+    }}>
+      
+      <div style={{ color: '#fff', fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>BC</div>
+
+      {tools.map((manifest) => {
         const isActive = activePluginId === manifest.id;
-        
-        // Let's fake some different icons based on the index for now
-        const icon = index === 0 ? '🎛️' : index === 1 ? '📦' : '🏢';
+        const icon = '🏢'; // Hardcode the building icon since it's our main tool
 
         return (
           <button 
@@ -153,8 +168,8 @@ export default function LeftPane() {
             title={manifest.name}
             style={{ 
               width: '44px', height: '44px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s', marginBottom: '10px',
-              backgroundColor: isActive ? '#2a2a2a' : 'transparent',
-              color: isActive ? '#4af626' : '#666',
+              backgroundColor: isActive ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: isActive ? '#4af626' : '#888',
               boxShadow: isActive ? 'inset 2px 0 0 0 #4af626' : 'none'
             }}
           >
@@ -173,18 +188,13 @@ import { useEffect } from 'react';
 import useStore from '../../core/store';
 import Slider from '../ui/Slider';
 import ColorInput from '../ui/ColorInput';
-import NumberInput from '../ui/NumberInput'; // <-- Import new component
+import NumberInput from '../ui/NumberInput'; 
 
-import gridManifest from '../../plugins/GridGenerator/manifest.json';
-import { compute as gridCompute } from '../../plugins/GridGenerator/compute';
-import boxManifest from '../../plugins/BoxGenerator/manifest.json';
-import { compute as boxCompute } from '../../plugins/BoxGenerator/compute';
+// Only import the Floorplan tool logic!
 import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 import { compute as floorplanCompute } from '../../plugins/FloorplanGrid/compute';
 
 const toolRegistry = {
-  [gridManifest.id]: { manifest: gridManifest, compute: gridCompute },
-  [boxManifest.id]: { manifest: boxManifest, compute: boxCompute },
   [floorplanManifest.id]: { manifest: floorplanManifest, compute: floorplanCompute }
 };
 
@@ -213,7 +223,7 @@ export default function MiddlePane() {
         if (config.type === 'color') {
           return <ColorInput key={key} label={config.label} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
         }
-        if (config.type === 'number') { // <-- Add Number routing!
+        if (config.type === 'number') { 
           return <NumberInput key={key} label={config.label} value={pluginInputs[key] ?? config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
         }
         return <Slider key={key} label={config.label} min={config.min} max={config.max} step={config.step} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
@@ -232,14 +242,18 @@ import Viewport3D from './Viewport3D';
 export default function RightPane() {
   const { pluginOutputs, theme, toggleTheme, visibility, toggleLevel, toggleType, selectedObject, setSelectedObject } = useStore(); 
   const [activeTab, setActiveTab] = useState('3d');
+  
+  // 🪄 NEW: State to track if the visibility panel is open or closed!
+  const [isVisibilityOpen, setIsVisibilityOpen] = useState(false);
 
   const tabStyle = (isActive) => ({
     padding: '0.5rem 1rem', cursor: 'pointer', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s',
-    backgroundColor: isActive ? '#333' : 'transparent', color: isActive ? '#fff' : '#888'
+    backgroundColor: isActive ? (theme === 'dark' ? '#333' : '#ddd') : 'transparent', 
+    color: isActive ? (theme === 'dark' ? '#fff' : '#111') : '#888'
   });
 
   const btnStyle = (isVisible) => ({
-    display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: isVisible ? '#fff' : '#555', cursor: 'pointer', padding: '6px 4px', width: '100%', textAlign: 'left', fontWeight: 'bold', fontSize: '0.8rem', transition: 'all 0.2s'
+    display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: isVisible ? '#fff' : '#777', cursor: 'pointer', padding: '6px 4px', width: '100%', textAlign: 'left', fontWeight: 'bold', fontSize: '0.8rem', transition: 'all 0.2s'
   });
 
   const typeColors = { Grid: '#00d1b2', WE01: '#d32f2f', WE02: '#f57c00', WI01: '#795548', WI02: '#9e9e9e', WI03: '#00acc1', SL01: '#8d6e63', SL02: '#bdbdbd' };
@@ -276,7 +290,7 @@ export default function RightPane() {
 
     return (
       <div style={{ padding: '4.5rem 2rem 2rem', color: theme === 'dark' ? '#e0e0e0' : '#111', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
-        <h2 style={{ marginBottom: '1.5rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Quantity Takeoff (QTO)</h2>
+        <h2 style={{ marginBottom: '1.5rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Quantity Takeoff (CSV)</h2>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', backgroundColor: theme === 'dark' ? '#181818' : '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
           <thead>
             <tr>
@@ -309,21 +323,37 @@ export default function RightPane() {
   return (
     <div style={{ flex: 1, position: 'relative', backgroundColor: theme === 'dark' ? '#121212' : '#f0f0f0', overflow: 'hidden', transition: 'background 0.3s' }}>
       
-      {/* HEADER TABS */}
-      <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10, display: 'flex', gap: '4px', backgroundColor: 'rgba(24, 24, 24, 0.8)', padding: '4px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #333' }}>
-        <button onClick={() => setActiveTab('3d')} style={tabStyle(activeTab === '3d')}>🧊 3D View</button>
-        <button onClick={() => setActiveTab('data')} style={tabStyle(activeTab === 'data')}>📊 Data View</button>
-        <button onClick={toggleTheme} style={{ ...tabStyle(false), marginLeft: '10px', fontSize: '1rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+      {/* 🪄 HEADER TABS (Updated names and added layer button!) */}
+      <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 30, display: 'flex', flexWrap: 'wrap', gap: '4px', backgroundColor: theme === 'dark' ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.75)', padding: '4px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}` }}>
+        <button onClick={() => setActiveTab('3d')} style={tabStyle(activeTab === '3d')}>🧊 3D</button>
+        <button onClick={() => setActiveTab('data')} style={tabStyle(activeTab === 'data')}>📊 CSV</button>
+        <button onClick={toggleTheme} style={{ ...tabStyle(false), marginLeft: '4px', fontSize: '1rem' }} title="Toggle Theme">{theme === 'dark' ? '☀️' : '🌙'}</button>
+        
+        {/* Toggle Button for the Visibility Panel */}
+        {activeTab === '3d' && (
+          <button onClick={() => setIsVisibilityOpen(!isVisibilityOpen)} style={{ ...tabStyle(isVisibilityOpen), marginLeft: '4px', borderLeft: `1px solid ${theme === 'dark' ? '#444' : '#ccc'}`, paddingLeft: '1rem', borderRadius: '0 6px 6px 0' }}>
+            👁️
+          </button>
+        )}
       </div>
 
-      {/* FILTER PANEL */}
-      {activeTab === '3d' && (
-        <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10, backgroundColor: 'rgba(20, 20, 20, 0.9)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #333', display: 'flex', flexDirection: 'column', width: '180px', maxHeight: '80vh', overflowY: 'auto' }}>
-          <h4 style={{ margin: '0 0 12px 0', color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #333', paddingBottom: '4px' }}>Project Levels</h4>
+      {/* 🪄 FILTER PANEL (Now Collapsible and Offset from Top!) */}
+      {activeTab === '3d' && isVisibilityOpen && (
+        <div style={{ position: 'absolute', top: '4.5rem', right: '1rem', zIndex: 20, backgroundColor: 'rgba(20, 20, 20, 0.85)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', border: '1px solid #333', display: 'flex', flexDirection: 'column', width: '180px', maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: '#aaa', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Visibility</h4>
+            <button onClick={() => setIsVisibilityOpen(false)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', padding: 0 }}>✕</button>
+          </div>
+
+          <h4 style={{ margin: '0 0 8px 0', color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Project Levels</h4>
           {[0, 1, 2, 3].map(lvl => (
-            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}><span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}</button>
+            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}>
+              <span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}
+            </button>
           ))}
-          <h4 style={{ margin: '20px 0 12px 0', color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #333', paddingBottom: '4px' }}>Element Types</h4>
+
+          <h4 style={{ margin: '16px 0 8px 0', color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Element Types</h4>
           {Object.keys(visibility.types).map(type => (
             <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])}>
               <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type], marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>{type}
@@ -332,23 +362,22 @@ export default function RightPane() {
         </div>
       )}
 
-      {/* --- 🖱️ NEW PROPERTIES PANEL (Shows when an object is clicked!) --- */}
+      {/* PROPERTIES PANEL (Clicking an object) */}
       {activeTab === '3d' && selectedObject && (
-        <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', zIndex: 10, backgroundColor: 'rgba(20, 20, 20, 0.95)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: '1px solid #4af626', display: 'flex', flexDirection: 'column', width: '240px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', color: '#fff' }}>
+        <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', zIndex: 10, backgroundColor: 'rgba(20, 20, 20, 0.85)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', border: '1px solid #4af626', display: 'flex', flexDirection: 'column', width: '240px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', color: '#fff' }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #444', paddingBottom: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: selectedObject.color }}></span>
               <h3 style={{ margin: 0, fontSize: '1rem' }}>{selectedObject.category}</h3>
             </div>
-            <button onClick={() => setSelectedObject(null)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>×</button>
+            <button onClick={() => setSelectedObject(null)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>✕</button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Type ID:</span> <strong>{selectedObject.typeId}</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Level:</span> <strong>0{selectedObject.level}</strong></div>
             
-            {/* Logic for Walls vs Slabs */}
             {selectedObject.category === 'Wall' ? (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Nodes:</span> <strong>{selectedObject.p1Id} ➔ {selectedObject.p2Id}</strong></div>
@@ -662,11 +691,12 @@ const useStore = create((set) => ({
   visibility: {
     levels: { 0: true, 1: true, 2: true, 3: true },
     types: {
-      Grid: true, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
+      // 👇 CHANGED: Grid is now set to false by default!
+      Grid: false, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
     }
   },
 
-  // --- NEW: INTERACTIVE SELECTION STATE ---
+  // --- INTERACTIVE SELECTION STATE ---
   selectedObject: null,
   setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
 
@@ -692,7 +722,7 @@ const useStore = create((set) => ({
   
   setPluginOutputs: (data) => set(() => ({ 
     pluginOutputs: data,
-    selectedObject: null // Clear selection when generating a new grid!
+    selectedObject: null // Clear selection when generating a new layout!
   })),
   
   clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
@@ -736,126 +766,120 @@ export function compute(inputs) {
 
 **C:\Projects\bimcube\src\plugins\FloorplanGrid\compute.js**
 ```text
-// 1. MATERIAL LIBRARY (With Priority for Auto-Joining)
-// Priority 1 is the highest (Wins corners & T-Intersections)
 const materialTypes = {
     'WE01': { priority: 1, thickness: 0.45, color: '#d32f2f', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WE02': { priority: 2, thickness: 0.40, color: '#f57c00', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI01': { priority: 3, thickness: 0.42, color: '#795548', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI02': { priority: 4, thickness: 0.40, color: '#9e9e9e', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    'WE02': { priority: 3, thickness: 0.40, color: '#f57c00', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    'WI01': { priority: 4, thickness: 0.42, color: '#795548', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
+    'WI02': { priority: 2, thickness: 0.40, color: '#9e9e9e', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
     'WI03': { priority: 5, thickness: 0.12, color: '#00acc1', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    
     'SL01': { thickness: 0.30, color: '#8d6e63', type: 'slab', zOffsetBottom: 0, zOffsetTop: 0 },    
     'SL02': { thickness: 0.25, color: '#bdbdbd', type: 'slab', zOffsetBottom: 0, zOffsetTop: 0.001 } 
 };
 
-// 2. THE BLUEPRINT (Your exact layout)
 const layoutBlueprint = {
     slabs: [
         { p1: 'Z0-A0', p2: 'Z0-I8', mat: 'SL01' },
         { p1: 'Z0-C3', p2: 'Z0-G5', mat: 'SL02' }
     ],
     walls: [
-        // --- WE01 (Timber450) - red ---
-        { p1: 'Z0-A0', p2: 'Z0-A8', mat: 'WE01' },
-        { p1: 'Z0-I8', p2: 'Z0-I0', mat: 'WE01' },
-
-        // --- WE02 (Timber400) - orange ---
-        { p1: 'Z0-A8', p2: 'Z0-I8', mat: 'WE02' }, 
-        { p1: 'Z0-I0', p2: 'Z0-A0', mat: 'WE02' },
-
-        // --- WI01 (Timber420) - brown ---
-        { p1: 'Z0-A4', p2: 'Z0-C4', mat: 'WI01' },
-        { p1: 'Z0-G4', p2: 'Z0-I4', mat: 'WI01' },
-        { p1: 'Z0-E0', p2: 'Z0-E1', mat: 'WI01' },
-        { p1: 'Z0-E7', p2: 'Z0-E8', mat: 'WI01' },
-
-        // --- WI02 (ConcreteCore400) - grey ---
-        { p1: 'Z0-D1', p2: 'Z0-D3', mat: 'WI02' },
-        { p1: 'Z0-D3', p2: 'Z0-C3', mat: 'WI02' },
-        { p1: 'Z0-C3', p2: 'Z0-C5', mat: 'WI02' },
-        { p1: 'Z0-C5', p2: 'Z0-C7', mat: 'WI02' },
-        { p1: 'Z0-C7', p2: 'Z0-F7', mat: 'WI02' },
-        { p1: 'Z0-F7', p2: 'Z0-F5', mat: 'WI02' },
-        { p1: 'Z0-F5', p2: 'Z0-G5', mat: 'WI02' },
-        { p1: 'Z0-G5', p2: 'Z0-G3', mat: 'WI02' },
-        { p1: 'Z0-G3', p2: 'Z0-F3', mat: 'WI02' },
-        { p1: 'Z0-F3', p2: 'Z0-F1', mat: 'WI02' },
-        { p1: 'Z0-F1', p2: 'Z0-D1', mat: 'WI02' },
-
-        // --- WI03 (Drywall 120) - green/blueish ---
-        { p1: 'Z0-C0', p2: 'Z0-C2', mat: 'WI03' },
-        { p1: 'Z0-C2', p2: 'Z0-D2', mat: 'WI03' },
-        { p1: 'Z0-C8', p2: 'Z0-C6', mat: 'WI03' },
-        { p1: 'Z0-C6', p2: 'Z0-D6', mat: 'WI03' },
-        { p1: 'Z0-F1', p2: 'Z0-G1', mat: 'WI03' },
-        { p1: 'Z0-G0', p2: 'Z0-G3', mat: 'WI03' },
-        { p1: 'Z0-G5', p2: 'Z0-G8', mat: 'WI03' },
-        { p1: 'Z0-F7', p2: 'Z0-G7', mat: 'WI03' },
-        { p1: 'Z0-H0', p2: 'Z0-H4', mat: 'WI03' },
-        { p1: 'Z0-H4', p2: 'Z0-H8', mat: 'WI03' },
-        
-        // Retaining your manual offsets
+        { p1: 'Z0-A0', p2: 'Z0-A8', mat: 'WE01' }, { p1: 'Z0-I8', p2: 'Z0-I0', mat: 'WE01' },
+        { p1: 'Z0-A8', p2: 'Z0-I8', mat: 'WE02' }, { p1: 'Z0-I0', p2: 'Z0-A0', mat: 'WE02' },
+        { p1: 'Z0-A4', p2: 'Z0-C4', mat: 'WI01' }, { p1: 'Z0-G4', p2: 'Z0-I4', mat: 'WI01' },
+        { p1: 'Z0-E0', p2: 'Z0-E1', mat: 'WI01' }, { p1: 'Z0-E7', p2: 'Z0-E8', mat: 'WI01' },
+        { p1: 'Z0-D1', p2: 'Z0-D3', mat: 'WI02' }, { p1: 'Z0-D3', p2: 'Z0-C3', mat: 'WI02' },
+        { p1: 'Z0-C3', p2: 'Z0-C7', mat: 'WI02' }, { p1: 'Z0-C7', p2: 'Z0-F7', mat: 'WI02' },
+        { p1: 'Z0-F7', p2: 'Z0-F5', mat: 'WI02' }, { p1: 'Z0-F5', p2: 'Z0-G5', mat: 'WI02' },
+        { p1: 'Z0-G5', p2: 'Z0-G3', mat: 'WI02' }, { p1: 'Z0-G3', p2: 'Z0-F3', mat: 'WI02' },
+        { p1: 'Z0-F3', p2: 'Z0-F1', mat: 'WI02' }, { p1: 'Z0-F1', p2: 'Z0-D1', mat: 'WI02' },
+        { p1: 'Z0-C0', p2: 'Z0-C2', mat: 'WI03' }, { p1: 'Z0-C2', p2: 'Z0-D2', mat: 'WI03' },
+        { p1: 'Z0-C8', p2: 'Z0-C6', mat: 'WI03' }, { p1: 'Z0-C6', p2: 'Z0-D6', mat: 'WI03' },
+        { p1: 'Z0-F1', p2: 'Z0-G1', mat: 'WI03' }, { p1: 'Z0-G0', p2: 'Z0-G3', mat: 'WI03' },
+        { p1: 'Z0-G5', p2: 'Z0-G8', mat: 'WI03' }, { p1: 'Z0-F7', p2: 'Z0-G7', mat: 'WI03' },
+        { p1: 'Z0-H0', p2: 'Z0-H4', mat: 'WI03' }, { p1: 'Z0-H4', p2: 'Z0-H8', mat: 'WI03' },
         { p1: 'Z0-H1', p2: 'Z0-H4', mat: 'WI03', offsetP1: { x: -1 }, offsetP2: { x: -1 } },
         { p1: 'Z0-H4', p2: 'Z0-H7', mat: 'WI03', offsetP1: { x: -1 }, offsetP2: { x: -1 } }
     ]
 };
 
 export function compute(inputs) {
-    const { widthX, depthY, z1, z2, z3 } = inputs;
+    // 1. Read the explicit floor heights
+    const { widthX, depthY, h00, h01, h02 } = inputs;
     
-    // --- 1. GRID GENERATION ---
+    // 2. Calculate CUMULATIVE Absolute Z Elevations
+    const zLevels = [
+        0,                        // Level 00 (Ground)
+        h00,                      // Level 01
+        h00 + h01,                // Level 02
+        h00 + h01 + h02           // Level 03 (Roof)
+    ];
+
     const Ex = widthX / 2;
     const B = Ex / 3;
-    const uAxis = { 'A': 0, 'B': B, 'C': B + B, 'D': Ex - 2, 'E': Ex, 'F': Ex + 2, 'G': Ex + B, 'H': Ex + B + B, 'I': widthX };
-
+    const uAxis = { 'A': 0, 
+                    'B': B, 
+                    'C': B + B, 
+                    'D': Ex - 2, 
+                    'E': Ex, 
+                    'F': Ex + 2, 
+                    'G': Ex + B, 
+                    'H': Ex + B + B, 
+                    'I': widthX 
+                };
     const Ey = depthY / 2;
-    const vAxis = { '0': 0, '1': Ey - 3, '2': Ey - 2.2, '3': Ey - 0.5, '4': Ey, '5': Ey + 0.5, '6': Ey + 2.2, '7': Ey + 3, '8': depthY };
+    const vAxis = { '0': 0, 
+                    '1': Ey - 3, 
+                    '2': Ey - 2.2, 
+                    '3': Ey - 0.5, 
+                    '4': Ey, 
+                    '5': Ey + 0.5, 
+                    '6': Ey + 2.2, 
+                    '7': Ey + 3, 
+                    '8': depthY 
+                };
 
-    const storeys = [z1, z2, z3];
     const points = [];
     const pointMap = {}; 
 
-    storeys.forEach((storeyHeight, index) => {
+    zLevels.forEach((elevation, index) => {
         for (const [uName, xVal] of Object.entries(uAxis)) {
             for (const [vName, zVal] of Object.entries(vAxis)) {
                 const id = `Z${index}-${uName}${vName}`; 
                 const centeredX = xVal - (widthX / 2);
                 const centeredZ = zVal - (depthY / 2);
-                const pointData = { id, name: `${uName}${vName}`, x: centeredX, y: storeyHeight, z: centeredZ };
+                
+                // TAGGED WITH LEVEL AND TYPE
+                const pointData = { id, name: `${uName}${vName}`, x: centeredX, y: elevation, z: centeredZ, level: index, typeId: 'Grid' };
                 points.push(pointData);
                 pointMap[id] = pointData; 
             }
         }
     });
 
-    const groundFloorHeight = z2 - z1;
-
-    // --- 2. SLAB GENERATION ---
     const generatedSlabs = layoutBlueprint.slabs.map(slabDef => {
         const p1 = pointMap[slabDef.p1];
         const p2 = pointMap[slabDef.p2];
         const mat = materialTypes[slabDef.mat];
         if (!p1 || !p2) return null;
 
+        const storeyIdx = parseInt(slabDef.p1.split('-')[0].substring(1));
         const width = Math.abs(p2.x - p1.x);
         const depth = Math.abs(p2.z - p1.z);
         const midX = (p1.x + p2.x) / 2;
         const midZ = (p1.z + p2.z) / 2;
         const midY = p1.y - (mat.thickness / 2) + (mat.zOffsetTop || 0); 
 
-        return { width, depth, height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color };
+        // TAGGED WITH LEVEL AND TYPE
+        return { width, depth, height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color, level: storeyIdx, typeId: slabDef.mat };
     }).filter(Boolean);
 
-
-    // --- 3. 🪄 THE GENIUS AUTO-JOIN WALL ALGORITHM (V2) 🪄 ---
-
-    // Step A: Pre-calculate raw physical geometry for every wall
     const rawWalls = layoutBlueprint.walls.map((wallDef, index) => {
         const p1 = pointMap[wallDef.p1];
         const p2 = pointMap[wallDef.p2];
         const mat = materialTypes[wallDef.mat];
         if (!p1 || !p2) return null;
+
+        const storeyIdx = parseInt(wallDef.p1.split('-')[0].substring(1));
+        const currentFloorHeight = zLevels[storeyIdx + 1] - zLevels[storeyIdx];
 
         const p1X = p1.x + (wallDef.offsetP1?.x || 0);
         const p1Z = p1.z + (wallDef.offsetP1?.z || 0);
@@ -867,42 +891,33 @@ export function compute(inputs) {
         const length = Math.sqrt((dx * dx) + (dz * dz)); 
         const isHorizontal = Math.abs(dx) > Math.abs(dz);
 
+        // TAGGED WITH LEVEL AND TYPE
         return {
             id: `W${index}`, p1Id: wallDef.p1, p2Id: wallDef.p2,
-            p1X, p1Z, p2X, p2Z, dx, dz, length, isHorizontal, mat,
-            baseLevel: p1.y + (mat.zOffsetBottom || 0)
+            p1X, p1Z, p2X, p2Z, dx, dz, length, isHorizontal, mat, currentFloorHeight,
+            baseLevel: p1.y + (mat.zOffsetBottom || 0), level: storeyIdx, typeId: wallDef.mat
         };
     }).filter(Boolean);
 
-    // Step B: Build the Topological Node Map (The T-Intersection Fix)
     const nodeConnections = {}; 
-    
-    // Initialize the map with every explicit endpoint
     rawWalls.forEach(wall => {
         if (!nodeConnections[wall.p1Id]) nodeConnections[wall.p1Id] = [];
         if (!nodeConnections[wall.p2Id]) nodeConnections[wall.p2Id] = [];
     });
 
-    // Helper: Does a specific grid node mathematically lie on the wall's grid line segment?
     const isPointOnGridSegment = (nodeId, wall) => {
         const node = pointMap[nodeId];
         const wP1 = pointMap[wall.p1Id];
         const wP2 = pointMap[wall.p2Id];
-        
-        // Pythagorean distance formula
         const d1 = Math.hypot(node.x - wP1.x, node.z - wP1.z);
         const d2 = Math.hypot(node.x - wP2.x, node.z - wP2.z);
         const lineLen = Math.hypot(wP2.x - wP1.x, wP2.z - wP1.z);
-        
-        // If the distance to the node from both ends equals the total length, the node is ON the line!
         return Math.abs((d1 + d2) - lineLen) < 0.001; 
     };
 
-    // Populate connections: Which walls pass through or touch this node?
     Object.keys(nodeConnections).forEach(nodeId => {
         rawWalls.forEach(wall => {
             if (isPointOnGridSegment(nodeId, wall)) {
-                // Ensure no duplicates
                 if (!nodeConnections[nodeId].some(w => w.id === wall.id)) {
                     nodeConnections[nodeId].push(wall);
                 }
@@ -910,29 +925,25 @@ export function compute(inputs) {
         });
     });
 
-    // Step C: Resolve the Intersections!
     const winsCorner = (wallA, wallB) => {
-        if (wallA.mat.priority < wallB.mat.priority) return true; // Lower number wins!
+        if (wallA.mat.priority < wallB.mat.priority) return true; 
         if (wallA.mat.priority > wallB.mat.priority) return false; 
-        return wallA.isHorizontal; // Tie breaker
+        return wallA.isHorizontal; 
     };
 
     const generatedWalls = rawWalls.map(wall => {
         let p1Extension = 0;
         let p2Extension = 0;
 
-        // Check Start Node (P1)
         const p1Competitors = nodeConnections[wall.p1Id].filter(w => w.id !== wall.id);
         if (p1Competitors.length > 0) {
             let dominantWall = p1Competitors[0];
             for (let i = 1; i < p1Competitors.length; i++) {
                 if (winsCorner(p1Competitors[i], dominantWall)) dominantWall = p1Competitors[i];
             }
-            // If we win, we push outward. If we lose, we shrink inward.
             p1Extension = winsCorner(wall, dominantWall) ? (dominantWall.mat.thickness / 2) : -(dominantWall.mat.thickness / 2);
         }
 
-        // Check End Node (P2)
         const p2Competitors = nodeConnections[wall.p2Id].filter(w => w.id !== wall.id);
         if (p2Competitors.length > 0) {
             let dominantWall = p2Competitors[0];
@@ -942,31 +953,30 @@ export function compute(inputs) {
             p2Extension = winsCorner(wall, dominantWall) ? (dominantWall.mat.thickness / 2) : -(dominantWall.mat.thickness / 2);
         }
 
-        // Apply mathematical extensions to physical endpoints
         const finalLength = wall.length + p1Extension + p2Extension;
-        
         const dirX = wall.dx / wall.length;
         const dirZ = wall.dz / wall.length;
         const newP1X = wall.p1X - (dirX * p1Extension);
         const newP1Z = wall.p1Z - (dirZ * p1Extension);
         const newP2X = wall.p2X + (dirX * p2Extension);
         const newP2Z = wall.p2Z + (dirZ * p2Extension);
-        
         const midX = (newP1X + newP2X) / 2;
         const midZ = (newP1Z + newP2Z) / 2;
 
-        const topLevel = wall.baseLevel + groundFloorHeight + (wall.mat.zOffsetTop || 0);
+        const topLevel = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
         const midY = wall.baseLevel + ((topLevel - wall.baseLevel) / 2);
         const rotationY = -Math.atan2(wall.dz, wall.dx);
 
+        // TAGGED WITH LEVEL AND TYPE
         return { 
             length: finalLength, height: topLevel - wall.baseLevel, thickness: wall.mat.thickness, 
-            x: midX, y: midY, z: midZ, rotationY, color: wall.mat.color 
+            x: midX, y: midY, z: midZ, rotationY, color: wall.mat.color,
+            level: wall.level, typeId: wall.typeId 
         };
     });
 
     return {
-        description: `Auto-Joined Parametric Layout`,
+        description: `Cumulative Elevations & Layers`,
         renderType: 'floorplan-grid', 
         dimensions: { widthX, depthY },
         coordinates: points,

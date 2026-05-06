@@ -1,0 +1,43 @@
+{
+  "materialTypes": {
+    "WE01": { "priority": 1, "thickness": 0.45, "color": "#d32f2f", "type": "exterior" }, 
+    "WE02": { "priority": 3, "thickness": 0.40, "color": "#f57c00", "type": "exterior" }, 
+    "WI01": { "priority": 4, "thickness": 0.42, "color": "#795548", "type": "interior" }, 
+    "WI02": { "priority": 2, "thickness": 0.40, "color": "#9e9e9e", "type": "interior" }, 
+    "WI03": { "priority": 5, "thickness": 0.12, "color": "#00acc1", "type": "interior" }, 
+    "SL01": { "thickness": 0.30, "color": "#8d6e63", "type": "slab" },    
+    "SL02": { "thickness": 0.25, "color": "#bdbdbd", "type": "slab", "zOffsetTop": 0.001 } 
+  },
+  "openingTypes": {
+    "DE01": { "width": 1.2, "height": 2.2, "sill": 0.0, "color": "#5c4033", "category": "Door", "opacity": 1.0 },
+    "DI01": { "width": 0.9, "height": 2.2, "sill": 0.0, "color": "#8b5a2b", "category": "Door", "opacity": 1.0 },
+    "WI01": { "width": 0.8, "height": 1.0, "sill": 0.8, "color": "#87ceeb", "category": "Window", "opacity": 0.5 },
+    "WI02": { "width": 0.8, "height": 2.2, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.5 }
+  },
+  "slabs": [
+    { "p1": "Z0-A0", "p2": "Z0-I8", "mat": "SL01" },
+    { "p1": "Z0-C3", "p2": "Z0-G5", "mat": "SL02" }
+  ],
+  "walls": [
+    { "p1": "Z0-A0", "p2": "Z0-A8", "mat": "WE01" }, { "p1": "Z0-I8", "p2": "Z0-I0", "mat": "WE01" },
+    { "p1": "Z0-A8", "p2": "Z0-I8", "mat": "WE02" }, { "p1": "Z0-I0", "p2": "Z0-A0", "mat": "WE02" },
+    { "p1": "Z0-A4", "p2": "Z0-C4", "mat": "WI01" }, { "p1": "Z0-G4", "p2": "Z0-I4", "mat": "WI01" },
+    { "p1": "Z0-E0", "p2": "Z0-E1", "mat": "WI01" }, { "p1": "Z0-E7", "p2": "Z0-E8", "mat": "WI01" },
+    { "p1": "Z0-D1", "p2": "Z0-D3", "mat": "WI02" }, { "p1": "Z0-D3", "p2": "Z0-C3", "mat": "WI02" },
+    { "p1": "Z0-C3", "p2": "Z0-C7", "mat": "WI02" }, { "p1": "Z0-C7", "p2": "Z0-F7", "mat": "WI02" },
+    { "p1": "Z0-F7", "p2": "Z0-F5", "mat": "WI02" }, { "p1": "Z0-F5", "p2": "Z0-G5", "mat": "WI02" },
+    { "p1": "Z0-G5", "p2": "Z0-G3", "mat": "WI02" }, { "p1": "Z0-G3", "p2": "Z0-F3", "mat": "WI02" },
+    { "p1": "Z0-F3", "p2": "Z0-F1", "mat": "WI02" }, { "p1": "Z0-F1", "p2": "Z0-D1", "mat": "WI02" },
+    { "p1": "Z0-C0", "p2": "Z0-C2", "mat": "WI03" }, { "p1": "Z0-C2", "p2": "Z0-D2", "mat": "WI03" },
+    { "p1": "Z0-C8", "p2": "Z0-C6", "mat": "WI03" }, { "p1": "Z0-C6", "p2": "Z0-D6", "mat": "WI03" },
+    { "p1": "Z0-F1", "p2": "Z0-G1", "mat": "WI03" }, { "p1": "Z0-G0", "p2": "Z0-G3", "mat": "WI03" },
+    { "p1": "Z0-G5", "p2": "Z0-G8", "mat": "WI03" }, { "p1": "Z0-F7", "p2": "Z0-G7", "mat": "WI03" },
+    { "p1": "Z0-H0", "p2": "Z0-H4", "mat": "WI03" }, { "p1": "Z0-H4", "p2": "Z0-H8", "mat": "WI03" }
+  ],
+  "openings": [
+    { "gridStart": "Z0-A1", "gridEnd": "Z0-A2", "type": "WI01" },
+    { "gridStart": "Z0-A3", "gridEnd": "Z0-A4", "type": "WI01" },
+    { "gridStart": "Z0-A6", "gridEnd": "Z0-A7", "type": "DE01" },
+    { "gridStart": "Z0-E0", "gridEnd": "Z0-F0", "type": "WI02" }
+  ]
+}
