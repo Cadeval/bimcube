@@ -30,16 +30,7 @@ export default function MiddlePane() {
   const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
   return (
-    <div style={{ 
-      position: 'absolute', top: 0, left: '60px', bottom: 0, 
-      width: '240px', 
-      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)', 
-      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-      borderRight: `1px solid ${borderCol}`, 
-      padding: '1.2rem', display: 'flex', flexDirection: 'column', zIndex: 40, overflowY: 'auto',
-      boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.3)' : '4px 0 24px rgba(0,0,0,0.05)'
-    }}>
-      
+    <div style={{ position: 'absolute', top: 0, left: '60px', bottom: 0, width: '240px', backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRight: `1px solid ${borderCol}`, padding: '1.2rem', display: 'flex', flexDirection: 'column', zIndex: 40, overflowY: 'auto', boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.3)' : '4px 0 24px rgba(0,0,0,0.05)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: `1px solid ${borderCol}`, paddingBottom: '0.5rem' }}>
         <h3 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)' }}>{activeTool.manifest.name}</h3>
       </div>
@@ -80,6 +71,14 @@ export default function MiddlePane() {
             
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Height:</span> <strong style={{ color: txtCol }}>{selectedObject.height.toFixed(2)} m</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Thick/Depth:</span> <strong style={{ color: txtCol }}>{((selectedObject.depth || selectedObject.thickness) * 1000).toFixed(0)} mm</strong></div>
+            
+            {/* 🪄 DISPLAY THE MATHEMATICAL TANGENT VECTOR! */}
+            {selectedObject.dirX !== undefined && (
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: `1px solid ${borderCol}` }}>
+                 <span style={{ color: dimCol }}>Vector (XZ):</span> 
+                 <strong style={{ color: txtCol }}>[{selectedObject.dirX.toFixed(2)}, {selectedObject.dirZ.toFixed(2)}]</strong>
+               </div>
+            )}
           </div>
         </div>
       )}

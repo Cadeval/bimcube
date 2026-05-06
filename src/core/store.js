@@ -6,16 +6,12 @@ const useStore = create((set) => ({
   pluginOutputs: {},  
   theme: 'dark', 
   
-  // --- MULTI-DIMENSIONAL VISIBILITY MATRIX ---
+  // 🪄 Now completely dynamic! Starts empty.
   visibility: {
-    levels: { 0: true, 1: true, 2: true, 3: true },
-    types: {
-      // 👇 CHANGED: Grid is now set to false by default!
-      Grid: false, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
-    }
+    levels: {},
+    types: {}
   },
 
-  // --- INTERACTIVE SELECTION STATE ---
   selectedObject: null,
   setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
 
@@ -39,10 +35,29 @@ const useStore = create((set) => ({
 
   setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
   
-  setPluginOutputs: (data) => set(() => ({ 
-    pluginOutputs: data,
-    selectedObject: null // Clear selection when generating a new layout!
-  })),
+  setPluginOutputs: (data) => set((state) => {
+    // 🪄 AUTO-DISCOVERY: Find all new layers and levels from the JSON!
+    const newLevels = { ...state.visibility.levels };
+    const newTypes = { ...state.visibility.types };
+
+    if (data.meta) {
+       data.meta.levels.forEach(lvl => {
+         if (newLevels[lvl] === undefined) newLevels[lvl] = true;
+       });
+       data.meta.types.forEach(type => {
+         if (newTypes[type] === undefined) {
+             // Default 'Grid' to false, everything else to true
+             newTypes[type] = type === 'Grid' ? false : true;
+         }
+       });
+    }
+
+    return { 
+      pluginOutputs: data,
+      visibility: { levels: newLevels, types: newTypes },
+      selectedObject: null 
+    };
+  }),
   
   clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
 }));

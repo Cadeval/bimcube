@@ -8,7 +8,6 @@ export default function Viewport3D() {
   const mountRef = useRef(null);
   const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject } = useStore(); 
   
-  // 🪄 NEW: We need persistent references to the camera and controls for our buttons to use!
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
@@ -20,7 +19,6 @@ export default function Viewport3D() {
     if (!currentMount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(theme === 'dark' ? '#242424' : '#e0e0e0');
     sceneRef.current = scene;
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -31,7 +29,7 @@ export default function Viewport3D() {
 
     const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
     camera.position.set(20, 15, 20);
-    cameraRef.current = camera; // Save to ref
+    cameraRef.current = camera; 
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
@@ -47,11 +45,7 @@ export default function Viewport3D() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controlsRef.current = controls; // Save to ref
-
-    const gridHelper = new THREE.GridHelper(50, 50, '#555555', '#444444');
-    gridHelperRef.current = gridHelper;
-    scene.add(gridHelper);
+    controlsRef.current = controls; 
 
     const group = new THREE.Group();
     scene.add(group);
@@ -108,10 +102,23 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 🪄 Light/Dark Mode Grid & Background Update
   useEffect(() => {
-    if (!sceneRef.current || !gridHelperRef.current) return;
-    sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#e0e0e0');
-    gridHelperRef.current.material.color.set(theme === 'dark' ? '#555555' : '#aaaaaa');
+    if (!sceneRef.current) return;
+    
+    sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#f5f5f5');
+    
+    if (gridHelperRef.current) {
+      sceneRef.current.remove(gridHelperRef.current);
+    }
+    
+    const mainColor = theme === 'dark' ? '#555555' : '#ffffff';
+    const subColor = theme === 'dark' ? '#444444' : '#e0e0e0';
+    
+    const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
+    gridHelperRef.current = gridHelper;
+    sceneRef.current.add(gridHelper);
+    
   }, [theme]);
 
   // Geometry Generation Loop
@@ -171,7 +178,8 @@ export default function Viewport3D() {
 
       if (pluginOutputs.openings) {
         pluginOutputs.openings.forEach((opening, index) => {
-          if (visibility.levels[opening.level]) {
+          // 🪄 THE FIX IS HERE: Added && visibility.types[opening.typeId]
+          if (visibility.levels[opening.level] && visibility.types[opening.typeId]) {
             const geom = new THREE.BoxGeometry(opening.width, opening.height, opening.depth);
             const mat = new THREE.MeshStandardMaterial({ 
               color: opening.color, roughness: opening.opacity < 1 ? 0.1 : 0.8, metalness: opening.opacity < 1 ? 0.8 : 0.1,
@@ -213,13 +221,11 @@ export default function Viewport3D() {
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     
-    // Calculate the distance required to fit the box based on Camera FOV
     const maxSize = Math.max(size.x, size.y, size.z);
     const fitHeightDistance = maxSize / (2 * Math.atan((Math.PI * cameraRef.current.fov) / 360));
     const fitWidthDistance = fitHeightDistance / cameraRef.current.aspect;
-    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance); // 1.2 adds a nice margin
+    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
 
-    // Move camera and target
     const direction = controlsRef.current.target.clone().sub(cameraRef.current.position).normalize().multiplyScalar(distance);
     controlsRef.current.target.copy(center);
     cameraRef.current.position.copy(controlsRef.current.target).sub(direction);
@@ -234,7 +240,6 @@ export default function Viewport3D() {
 
   const handleZoomSelected = () => {
     if (!selectedObject || !groupRef.current) return;
-    // Find the specific mesh that matches our selected object
     const selectedMesh = groupRef.current.children.find(child => child.userData?.id === selectedObject.id);
     if (selectedMesh) {
       const box = new THREE.Box3().setFromObject(selectedMesh);
@@ -245,18 +250,15 @@ export default function Viewport3D() {
   const handleSetView = (viewType) => {
     if (!cameraRef.current || !controlsRef.current || !groupRef.current) return;
     
-    // Find center of the entire building
     const box = new THREE.Box3().setFromObject(groupRef.current);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
     const distance = maxDim * 1.5;
 
-    // Set the target to the center of the building
     controlsRef.current.target.copy(center);
 
-    // Jump camera to specific axis
-    if (viewType === 'top') cameraRef.current.position.set(center.x, center.y + distance, center.z + 0.1); // slight offset to prevent gimbal lock
+    if (viewType === 'top') cameraRef.current.position.set(center.x, center.y + distance, center.z + 0.1); 
     if (viewType === 'front') cameraRef.current.position.set(center.x, center.y, center.z + distance);
     if (viewType === 'left') cameraRef.current.position.set(center.x - distance, center.y, center.z);
     if (viewType === 'iso') cameraRef.current.position.set(center.x + distance, center.y + distance, center.z + distance);
@@ -264,34 +266,33 @@ export default function Viewport3D() {
     cameraRef.current.updateProjectionMatrix();
   };
 
-  // UI Styles
+  // 🪄 NAVIGATION TOOLBAR STYLES (Responsive to Light Mode)
+  const isDark = theme === 'dark';
   const toolbarStyle = {
     position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
-    backgroundColor: theme === 'dark' ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.75)',
-    backdropFilter: 'blur(10px)', border: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`,
-    borderRadius: '8px', display: 'flex', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+    backgroundColor: isDark ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(10px)', border: `1px solid ${isDark ? '#333' : '#ddd'}`,
+    borderRadius: '8px', display: 'flex', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
   };
 
   const btnStyle = {
-    background: 'transparent', border: 'none', color: theme === 'dark' ? '#aaa' : '#555', cursor: 'pointer',
+    background: 'transparent', border: 'none', color: isDark ? '#aaa' : '#666', cursor: 'pointer',
     padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s'
   };
 
   return (
     <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       
-      {/* 🪄 NEW: FLOATING NAVIGATION TOOLBAR */}
       <div style={toolbarStyle}>
-        <button onClick={() => handleSetView('top')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Top</button>
-        <button onClick={() => handleSetView('front')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Front</button>
-        <button onClick={() => handleSetView('left')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Left</button>
-        <button onClick={() => handleSetView('iso')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>Iso</button>
+        <button onClick={() => handleSetView('top')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Top</button>
+        <button onClick={() => handleSetView('front')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Front</button>
+        <button onClick={() => handleSetView('left')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Left</button>
+        <button onClick={() => handleSetView('iso')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Iso</button>
         
-        <div style={{ width: '1px', backgroundColor: theme === 'dark' ? '#444' : '#ccc', margin: '0 4px' }} />
+        <div style={{ width: '1px', backgroundColor: isDark ? '#444' : '#ccc', margin: '0 4px' }} />
         
-        <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = theme === 'dark' ? '#aaa' : '#555'}>All</button>
+        <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>🔍 Fit All</button>
         
-        {/* Only show "Zoom Selected" if an object is actively clicked! */}
         {selectedObject && (
           <button onClick={handleZoomSelected} style={{...btnStyle, color: '#3366ff'}} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
             🎯 Fit Selected
