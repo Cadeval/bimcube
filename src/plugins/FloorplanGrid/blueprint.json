@@ -2,11 +2,12 @@
   "materialTypes": {
     "WE1": { "priority": 1, "thickness": 0.46, "color": "#d32f2f", "type": "exterior" },
     "WE2": { "priority": 2, "thickness": 0.42, "color": "#f57c00", "type": "exterior" },
-    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0, "fixedHeight": 0.8 },
+    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0, "fixedHeight": 0.5 },
     "WI1": { "priority": 3, "thickness": 0.40, "color": "#9e9e9e", "type": "concrete_core" },
     "WI2": { "priority": 4, "thickness": 0.42, "color": "#795548", "type": "timber_loadbearing" },
     "WI3": { "priority": 5, "thickness": 0.10, "color": "#eeeeee", "type": "drywall" },
-    "CW1": { "priority": 10, "thickness": 0.05, "color": "#e0f2f1", "type": "curtain_wall", "opacity": 0.3 },
+    "CW1": { "priority": 10, "thickness": 0.15, "color": "#cfd8dc", "type": "curtain_wall_complex" },
+    "CW2": { "priority": 10, "thickness": 0.10, "color": "#fafafa", "type": "curtain_wall_plaster" },
     "SF1": { "thickness": 0.60, "color": "#5d4037", "type": "foundation" },
     "SL1": { "thickness": 0.42, "color": "#8d6e63", "type": "timber_slab" },
     "SR1": { "thickness": 0.62, "color": "#37474f", "type": "roof_slab", "zOffsetTop": 0.20 },
@@ -16,23 +17,28 @@
     "OD1": { "width": 1.2, "height": 2.2, "sill": 0.0, "color": "#5c4033", "category": "Door", "opacity": 1.0 },
     "OD2": { "width": 0.9, "height": 2.2, "sill": 0.0, "color": "#8b5a2b", "category": "Door", "opacity": 1.0 },
     "OD3": { "width": 0.8, "height": 2.0, "sill": 0.0, "color": "#d7ccc8", "category": "Door", "opacity": 1.0 },
-    "OW1": { "width": 1.2, "height": 2.2, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.4 },
-    "OW2": { "width": 2.4, "height": 2.2, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.4 }
+    "OW1": { "width": 1.4, "height": 2.4, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.4 },
+    "OW2": { "width": 2.0, "height": 2.4, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.4 }
   },
   "slabs": [
     { "p1": "Z0-A0", "p2": "Z0-I8", "mat": "SF1" },
+    
     { "p1": "Z1-A0", "p2": "Z1-C8", "mat": "SL1" }, { "p1": "Z1-C0", "p2": "Z1-D3", "mat": "SL1" },
     { "p1": "Z1-C5", "p2": "Z1-D8", "mat": "SL1" }, { "p1": "Z1-D0", "p2": "Z1-F1", "mat": "SL1" },
     { "p1": "Z1-D7", "p2": "Z1-F8", "mat": "SL1" }, { "p1": "Z1-F0", "p2": "Z1-G3", "mat": "SL1" },
     { "p1": "Z1-G5", "p2": "Z1-G8", "mat": "SL1" }, { "p1": "Z1-G0", "p2": "Z1-I8", "mat": "SL1" },
     { "p1": "Z1-C3", "p2": "Z1-G5", "mat": "WI1" },
     { "p1": "Z1-D5", "p2": "Z1-D6", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F7", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F5", "mat": "ST1" },
+    { "p1": "Z1-F2", "p2": "Z1-G8", "mat": "SL1" }, 
+
     { "p1": "Z2-A0", "p2": "Z2-C8", "mat": "SL1" }, { "p1": "Z2-C0", "p2": "Z2-D3", "mat": "SL1" },
     { "p1": "Z2-C5", "p2": "Z2-D8", "mat": "SL1" }, { "p1": "Z2-D0", "p2": "Z2-F1", "mat": "SL1" },
     { "p1": "Z2-D7", "p2": "Z2-F8", "mat": "SL1" }, { "p1": "Z2-F0", "p2": "Z2-G3", "mat": "SL1" },
     { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "SL1" }, { "p1": "Z2-G0", "p2": "Z2-I8", "mat": "SL1" },
     { "p1": "Z2-C3", "p2": "Z2-G5", "mat": "WI1" },
     { "p1": "Z2-D5", "p2": "Z2-D6", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F7", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F5", "mat": "ST1" },
+    { "p1": "Z2-F2", "p2": "Z2-G8", "mat": "SL1" }, 
+
     { "p1": "Z3-A0", "p2": "Z3-I8", "mat": "SR1" }
   ],
   "walls": [
@@ -142,9 +148,9 @@
     { "gridStart": "Z2-H0", "gridEnd": "Z2-I0", "type": "OW1" }, { "gridStart": "Z2-H8", "gridEnd": "Z2-I8", "type": "OW1" }
   ],
   "facades": [
-    { "gridStart": "A0", "gridEnd": "A8", "mat": "CW1", "offsetX": -0.255 },
+    { "gridStart": "A0", "gridEnd": "A8", "mat": "CW2", "offsetX": -0.255 },
     { "gridStart": "A8", "gridEnd": "I8", "mat": "CW1", "offsetZ": 0.255 },
-    { "gridStart": "I8", "gridEnd": "I0", "mat": "CW1", "offsetX": 0.255 },
+    { "gridStart": "I8", "gridEnd": "I0", "mat": "CW2", "offsetX": 0.255 },
     { "gridStart": "I0", "gridEnd": "A0", "mat": "CW1", "offsetZ": -0.255 }
   ]
 }

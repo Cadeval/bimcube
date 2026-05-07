@@ -94,10 +94,19 @@ import RightPane from './components/layout/RightPane';
 
 function App() {
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', margin: 0, padding: 0, backgroundColor: '#121212', color: '#e0e0e0', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ 
+      position: 'relative', // 🪄 NEW: Allows elements to float inside
+      width: '100vw', 
+      height: '100vh', 
+      backgroundColor: '#121212', 
+      color: '#e0e0e0', 
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      overflow: 'hidden' // Prevents scrollbars from floating panels
+    }}>
+      {/* 🪄 RightPane is rendered FIRST so it stays in the background */}
+      <RightPane />
       <LeftPane />
       <MiddlePane />
-      <RightPane />
     </div>
   );
 }
@@ -123,44 +132,33 @@ createRoot(document.getElementById('root')).render(
 ```text
 import { useEffect } from 'react';
 import useStore from '../../core/store';
-
-// 1. Import ONLY your master Floorplan tool
 import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 
-// 2. The Tool Registry Array
 const tools = [floorplanManifest];
 
 export default function LeftPane() {
-  const { activePluginId, setActivePlugin, clearActivePlugin } = useStore();
+  const { activePluginId, setActivePlugin, clearActivePlugin, theme } = useStore();
+  const isDark = theme === 'dark';
 
-  // 🪄 NEW: Auto-activate the Floorplan tool when the app loads!
   useEffect(() => {
-    if (!activePluginId) {
-      setActivePlugin(floorplanManifest);
-    }
+    if (!activePluginId) setActivePlugin(floorplanManifest);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div style={{ 
+      position: 'absolute', top: 0, left: 0, bottom: 0, 
       width: '60px', 
-      backgroundColor: 'rgba(24, 24, 24, 0.65)', 
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)', 
-      borderRight: '1px solid rgba(255, 255, 255, 0.05)', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center', 
-      padding: '1.5rem 0', 
-      zIndex: 20 
+      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)', 
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', 
+      borderRight: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.1)'}`, 
+      display: 'flex', flexDirection: 'column', alignItems: 'center', 
+      padding: '1.5rem 0', zIndex: 50 
     }}>
-      
-      <div style={{ color: '#fff', fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>BC</div>
+      <div style={{ color: isDark ? '#fff' : '#111', fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem', textShadow: isDark ? '0 2px 4px rgba(0,0,0,0.5)' : 'none' }}>BC</div>
 
       {tools.map((manifest) => {
         const isActive = activePluginId === manifest.id;
-        const icon = '🏢'; // Hardcode the building icon since it's our main tool
-
         return (
           <button 
             key={manifest.id}
@@ -168,12 +166,12 @@ export default function LeftPane() {
             title={manifest.name}
             style={{ 
               width: '44px', height: '44px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s', marginBottom: '10px',
-              backgroundColor: isActive ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-              color: isActive ? '#4af626' : '#888',
-              boxShadow: isActive ? 'inset 2px 0 0 0 #4af626' : 'none'
+              backgroundColor: isActive ? (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)') : 'transparent',
+              color: isActive ? (isDark ? '#ffffff' : '#111111') : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'),
+              boxShadow: isActive ? `inset 2px 0 0 0 ${isDark ? '#ffffff' : '#111111'}` : 'none'
             }}
           >
-            {icon}
+            🏢
           </button>
         )
       })}
@@ -190,7 +188,6 @@ import Slider from '../ui/Slider';
 import ColorInput from '../ui/ColorInput';
 import NumberInput from '../ui/NumberInput'; 
 
-// Only import the Floorplan tool logic!
 import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
 import { compute as floorplanCompute } from '../../plugins/FloorplanGrid/compute';
 
@@ -199,8 +196,9 @@ const toolRegistry = {
 };
 
 export default function MiddlePane() {
-  const { activePluginId, pluginInputs, setInputValue, setPluginOutputs, clearActivePlugin } = useStore();
+  const { activePluginId, pluginInputs, setInputValue, setPluginOutputs, clearActivePlugin, selectedObject, setSelectedObject, theme } = useStore();
   const activeTool = toolRegistry[activePluginId];
+  const isDark = theme === 'dark';
 
   useEffect(() => {
     if (activeTool && pluginInputs[Object.keys(activeTool.manifest.inputs)[0]] !== undefined) {
@@ -211,23 +209,63 @@ export default function MiddlePane() {
 
   if (!activeTool) return null;
 
+  const txtCol = isDark ? '#ffffff' : '#111111';
+  const dimCol = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
+  const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+
   return (
-    <div style={{ width: '280px', backgroundColor: '#202020', borderRight: '1px solid #2a2a2a', padding: '1.5rem', display: 'flex', flexDirection: 'column', zIndex: 10, overflowY: 'auto' }}>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '1rem' }}>
-        <h3 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#888' }}>{activeTool.manifest.name}</h3>
-        <button onClick={clearActivePlugin} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+    <div style={{ position: 'absolute', top: 0, left: '60px', bottom: 0, width: '240px', backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRight: `1px solid ${borderCol}`, padding: '1.2rem', display: 'flex', flexDirection: 'column', zIndex: 40, overflowY: 'auto', boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.3)' : '4px 0 24px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: `1px solid ${borderCol}`, paddingBottom: '0.5rem' }}>
+        <h3 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)' }}>{activeTool.manifest.name}</h3>
       </div>
 
       {Object.entries(activeTool.manifest.inputs).map(([key, config]) => {
-        if (config.type === 'color') {
-          return <ColorInput key={key} label={config.label} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
-        }
-        if (config.type === 'number') { 
-          return <NumberInput key={key} label={config.label} value={pluginInputs[key] ?? config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
-        }
+        if (config.type === 'color') return <ColorInput key={key} label={config.label} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
+        if (config.type === 'number') return <NumberInput key={key} label={config.label} value={pluginInputs[key] ?? config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
         return <Slider key={key} label={config.label} min={config.min} max={config.max} step={config.step} value={pluginInputs[key] || config.defaultValue} onChange={(val) => setInputValue(key, val)} />;
       })}
+
+      {selectedObject && (
+        <div style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: `1px dashed ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: selectedObject.color }}></span>
+              <h3 style={{ margin: 0, fontSize: '0.85rem', color: txtCol }}>{selectedObject.category}</h3>
+            </div>
+            <button onClick={() => setSelectedObject(null)} style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', fontSize: '1rem', padding: 0 }}>✕</button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Type:</span> <strong style={{ color: txtCol }}>{selectedObject.typeId}</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Level:</span> <strong style={{ color: txtCol }}>0{selectedObject.level}</strong></div>
+            
+            {selectedObject.category === 'Wall' ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Nodes:</span> <strong style={{ color: txtCol }}>{selectedObject.p1Id} ➔ {selectedObject.p2Id}</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Length:</span> <strong style={{ color: txtCol }}>{selectedObject.length.toFixed(2)} m</strong></div>
+              </>
+            ) : selectedObject.category === 'Slab' ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Width:</span> <strong style={{ color: txtCol }}>{selectedObject.width.toFixed(2)} m</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Depth:</span> <strong style={{ color: txtCol }}>{selectedObject.depth.toFixed(2)} m</strong></div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Width:</span> <strong style={{ color: txtCol }}>{selectedObject.width.toFixed(2)} m</strong></div>
+            )}
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Height:</span> <strong style={{ color: txtCol }}>{selectedObject.height.toFixed(2)} m</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Thick/Depth:</span> <strong style={{ color: txtCol }}>{((selectedObject.depth || selectedObject.thickness) * 1000).toFixed(0)} mm</strong></div>
+            
+            {/* 🪄 DISPLAY THE MATHEMATICAL TANGENT VECTOR! */}
+            {selectedObject.dirX !== undefined && (
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: `1px solid ${borderCol}` }}>
+                 <span style={{ color: dimCol }}>Vector (XZ):</span> 
+                 <strong style={{ color: txtCol }}>[{selectedObject.dirX.toFixed(2)}, {selectedObject.dirZ.toFixed(2)}]</strong>
+               </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -240,78 +278,62 @@ import useStore from '../../core/store';
 import Viewport3D from './Viewport3D';
 
 export default function RightPane() {
-  const { pluginOutputs, theme, toggleTheme, visibility, toggleLevel, toggleType, selectedObject, setSelectedObject } = useStore(); 
+  const { pluginOutputs, theme, toggleTheme, visibility, toggleLevel, toggleType, activePluginId, clipping, setClipping } = useStore(); 
   const [activeTab, setActiveTab] = useState('3d');
-  
-  // 🪄 NEW: State to track if the visibility panel is open or closed!
   const [isVisibilityOpen, setIsVisibilityOpen] = useState(false);
+  const [isSectionOpen, setIsSectionOpen] = useState(false); // 🪄 New state for Section tool
+
+  const isDark = theme === 'dark';
+  const isMenuOpen = !!activePluginId;
+  const leftOffset = isMenuOpen ? 300 : 60; 
+
+  const bgGlass = isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)';
+  const bgSolid = isDark ? 'rgba(24, 24, 24, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+  const borderCol = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.1)';
+  const txtCol = isDark ? '#ffffff' : '#111111';
+  const dimCol = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+  const hoverBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+
+  const typeColors = pluginOutputs?.meta?.colors || { Grid: '#00d1b2' };
+  const availableLevels = pluginOutputs?.meta?.levels || [0, 1, 2, 3];
 
   const tabStyle = (isActive) => ({
     padding: '0.5rem 1rem', cursor: 'pointer', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s',
-    backgroundColor: isActive ? (theme === 'dark' ? '#333' : '#ddd') : 'transparent', 
-    color: isActive ? (theme === 'dark' ? '#fff' : '#111') : '#888'
+    backgroundColor: isActive ? hoverBg : 'transparent', color: isActive ? txtCol : dimCol
   });
 
   const btnStyle = (isVisible) => ({
-    display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: isVisible ? '#fff' : '#777', cursor: 'pointer', padding: '6px 4px', width: '100%', textAlign: 'left', fontWeight: 'bold', fontSize: '0.8rem', transition: 'all 0.2s'
+    display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', 
+    color: isVisible ? txtCol : dimCol, cursor: 'pointer', padding: '6px 4px', width: '100%', textAlign: 'left', fontWeight: 'bold', fontSize: '0.8rem', transition: 'all 0.2s'
   });
 
-  const typeColors = { Grid: '#00d1b2', WE01: '#d32f2f', WE02: '#f57c00', WI01: '#795548', WI02: '#9e9e9e', WI03: '#00acc1', SL01: '#8d6e63', SL02: '#bdbdbd' };
-
   const generateQTO = () => {
-    if (!pluginOutputs || pluginOutputs.renderType !== 'floorplan-grid') {
-      return <div style={{ padding: '2rem', color: theme === 'dark' ? '#888' : '#666', fontFamily: 'monospace' }}>// Generate a floorplan grid...</div>;
-    }
-
+    if (!pluginOutputs || pluginOutputs.renderType !== 'floorplan-grid') return <div style={{ padding: '2rem', color: dimCol, fontFamily: 'monospace' }}>// Generate layout...</div>;
     const qto = {};
-    if (pluginOutputs.slabs) {
-      pluginOutputs.slabs.forEach(slab => {
+    if (pluginOutputs.slabs) pluginOutputs.slabs.forEach(slab => {
         const type = slab.typeId || 'Unknown Slab';
         if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: true };
-        qto[type].count += 1;
-        qto[type].area += (slab.width * slab.depth);
-        qto[type].volume += (slab.width * slab.depth * slab.height);
-      });
-    }
-
-    if (pluginOutputs.walls) {
-      pluginOutputs.walls.forEach(wall => {
+        qto[type].count += 1; qto[type].area += (slab.width * slab.depth); qto[type].volume += (slab.width * slab.depth * slab.height);
+    });
+    if (pluginOutputs.walls) pluginOutputs.walls.forEach(wall => {
         const type = wall.typeId || 'Unknown Wall';
         if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: false };
-        qto[type].count += 1;
-        qto[type].length += wall.length;
-        qto[type].area += (wall.length * wall.height);
-        qto[type].volume += (wall.length * wall.height * wall.thickness);
-      });
-    }
+        qto[type].count += 1; qto[type].length += wall.length; qto[type].area += (wall.length * wall.height); qto[type].volume += (wall.length * wall.height * wall.thickness);
+    });
 
-    const cellStyle = { padding: '12px', borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`, textAlign: 'right' };
-    const headerStyle = { ...cellStyle, color: theme === 'dark' ? '#888' : '#666', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' };
+    const cellStyle = { padding: '12px', borderBottom: `1px solid ${borderCol}`, textAlign: 'right', color: txtCol };
+    const headerStyle = { ...cellStyle, color: dimCol, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' };
 
     return (
-      <div style={{ padding: '4.5rem 2rem 2rem', color: theme === 'dark' ? '#e0e0e0' : '#111', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+      <div style={{ padding: `4.5rem 2rem 2rem ${leftOffset + 48}px`, transition: 'padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)', color: txtCol, height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
         <h2 style={{ marginBottom: '1.5rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Quantity Takeoff (CSV)</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', backgroundColor: theme === 'dark' ? '#181818' : '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          <thead>
-            <tr>
-              <th style={{ ...headerStyle, textAlign: 'left' }}>Element Type</th>
-              <th style={{ ...headerStyle }}>Count</th>
-              <th style={{ ...headerStyle }}>Total Length (m)</th>
-              <th style={{ ...headerStyle }}>Total Area (m²)</th>
-              <th style={{ ...headerStyle }}>Total Volume (m³)</th>
-            </tr>
-          </thead>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', backgroundColor: isDark ? 'rgba(24,24,24,0.6)' : 'rgba(255,255,255,0.6)', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <thead><tr><th style={{ ...headerStyle, textAlign: 'left' }}>Element Type</th><th style={{ ...headerStyle }}>Count</th><th style={{ ...headerStyle }}>Total Length (m)</th><th style={{ ...headerStyle }}>Total Area (m²)</th><th style={{ ...headerStyle }}>Total Volume (m³)</th></tr></thead>
           <tbody>
             {Object.keys(qto).sort().map(type => (
-              <tr key={type} style={{ transition: 'background 0.2s', ':hover': { backgroundColor: theme === 'dark' ? '#222' : '#f9f9f9' } }}>
-                <td style={{ ...cellStyle, textAlign: 'left', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px' }}></span>
-                  {type}
-                </td>
-                <td style={{ ...cellStyle }}>{qto[type].count}</td>
-                <td style={{ ...cellStyle, color: theme === 'dark' ? '#4af626' : '#008800' }}>{qto[type].isSlab ? '-' : qto[type].length.toFixed(2)}</td>
-                <td style={{ ...cellStyle }}>{qto[type].area.toFixed(2)}</td>
-                <td style={{ ...cellStyle, fontWeight: 'bold' }}>{qto[type].volume.toFixed(2)}</td>
+              <tr key={type} style={{ transition: 'background 0.2s', ':hover': { backgroundColor: hoverBg } }}>
+                <td style={{ ...cellStyle, textAlign: 'left', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}><span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px' }}></span>{type}</td>
+                <td style={{ ...cellStyle }}>{qto[type].count}</td><td style={{ ...cellStyle }}>{qto[type].isSlab ? '-' : qto[type].length.toFixed(2)}</td><td style={{ ...cellStyle }}>{qto[type].area.toFixed(2)}</td><td style={{ ...cellStyle, fontWeight: 'bold' }}>{qto[type].volume.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -321,85 +343,82 @@ export default function RightPane() {
   };
 
   return (
-    <div style={{ flex: 1, position: 'relative', backgroundColor: theme === 'dark' ? '#121212' : '#f0f0f0', overflow: 'hidden', transition: 'background 0.3s' }}>
+    <div style={{ position: 'absolute', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: isDark ? '#121212' : '#f5f5f5', overflow: 'hidden', transition: 'background 0.3s' }}>
       
-      {/* 🪄 HEADER TABS (Updated names and added layer button!) */}
-      <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 30, display: 'flex', flexWrap: 'wrap', gap: '4px', backgroundColor: theme === 'dark' ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.75)', padding: '4px', borderRadius: '8px', backdropFilter: 'blur(10px)', border: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}` }}>
+      {/* 🪄 TABS & ICONS HEADER */}
+      <div style={{ position: 'absolute', top: '1rem', left: `${leftOffset + 32}px`, transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)', zIndex: 30, display: 'flex', flexWrap: 'wrap', gap: '4px', backgroundColor: bgGlass, padding: '4px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}` }}>
         <button onClick={() => setActiveTab('3d')} style={tabStyle(activeTab === '3d')}>🧊 3D</button>
         <button onClick={() => setActiveTab('data')} style={tabStyle(activeTab === 'data')}>📊 CSV</button>
-        <button onClick={toggleTheme} style={{ ...tabStyle(false), marginLeft: '4px', fontSize: '1rem' }} title="Toggle Theme">{theme === 'dark' ? '☀️' : '🌙'}</button>
+        <button onClick={toggleTheme} style={{ ...tabStyle(false), marginLeft: '4px', fontSize: '1rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</button>
         
-        {/* Toggle Button for the Visibility Panel */}
         {activeTab === '3d' && (
-          <button onClick={() => setIsVisibilityOpen(!isVisibilityOpen)} style={{ ...tabStyle(isVisibilityOpen), marginLeft: '4px', borderLeft: `1px solid ${theme === 'dark' ? '#444' : '#ccc'}`, paddingLeft: '1rem', borderRadius: '0 6px 6px 0' }}>
-            👁️
-          </button>
+          <>
+            <button onClick={() => { setIsVisibilityOpen(!isVisibilityOpen); setIsSectionOpen(false); }} style={{ ...tabStyle(isVisibilityOpen), marginLeft: '4px', borderLeft: `1px solid ${borderCol}`, paddingLeft: '1rem', borderRadius: '0' }}>
+              👁️ Layers
+            </button>
+            <button onClick={() => { setIsSectionOpen(!isSectionOpen); setIsVisibilityOpen(false); }} style={{ ...tabStyle(isSectionOpen), borderRadius: '0 6px 6px 0', color: clipping.enabled ? '#4af626' : dimCol }}>
+              ✂️ Section
+            </button>
+          </>
         )}
       </div>
 
-      {/* 🪄 FILTER PANEL (Now Collapsible and Offset from Top!) */}
+      {/* VISIBILITY PANEL */}
       {activeTab === '3d' && isVisibilityOpen && (
-        <div style={{ position: 'absolute', top: '4.5rem', right: '1rem', zIndex: 20, backgroundColor: 'rgba(20, 20, 20, 0.85)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', border: '1px solid #333', display: 'flex', flexDirection: 'column', width: '180px', maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
-            <h4 style={{ margin: 0, color: '#aaa', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Visibility</h4>
-            <button onClick={() => setIsVisibilityOpen(false)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', padding: 0 }}>✕</button>
+        <div style={{ position: 'absolute', top: '4.5rem', left: `${leftOffset + 32}px`, zIndex: 20, backgroundColor: bgSolid, padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', width: '200px', maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: `1px solid ${borderCol}`, paddingBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: dimCol, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Visibility</h4>
+            <button onClick={() => setIsVisibilityOpen(false)} style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', padding: 0 }}>✕</button>
           </div>
-
-          <h4 style={{ margin: '0 0 8px 0', color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Project Levels</h4>
-          {[0, 1, 2, 3].map(lvl => (
-            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}>
-              <span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}
-            </button>
+          <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Project Levels</h4>
+          {[...availableLevels].map(lvl => (
+            <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])}><span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}</button>
           ))}
-
-          <h4 style={{ margin: '16px 0 8px 0', color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Element Types</h4>
-          {Object.keys(visibility.types).map(type => (
-            <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])}>
-              <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type], marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>{type}
-            </button>
+          <h4 style={{ margin: '16px 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Element Types</h4>
+          {Object.keys(visibility.types).sort().map(type => (
+            <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])}><span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>{type}</button>
           ))}
         </div>
       )}
 
-      {/* PROPERTIES PANEL (Clicking an object) */}
-      {activeTab === '3d' && selectedObject && (
-        <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', zIndex: 10, backgroundColor: 'rgba(20, 20, 20, 0.85)', padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', border: '1px solid #4af626', display: 'flex', flexDirection: 'column', width: '240px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', color: '#fff' }}>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #444', paddingBottom: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: selectedObject.color }}></span>
-              <h3 style={{ margin: 0, fontSize: '1rem' }}>{selectedObject.category}</h3>
-            </div>
-            <button onClick={() => setSelectedObject(null)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>✕</button>
+      {/* 🪄 SECTIONING PANEL */}
+      {activeTab === '3d' && isSectionOpen && (
+        <div style={{ position: 'absolute', top: '4.5rem', left: `${leftOffset + 32}px`, zIndex: 20, backgroundColor: bgSolid, padding: '16px', borderRadius: '8px', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', width: '240px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: `1px solid ${borderCol}`, paddingBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: dimCol, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Live Sectioning</h4>
+            <button onClick={() => setIsSectionOpen(false)} style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', padding: 0 }}>✕</button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Type ID:</span> <strong>{selectedObject.typeId}</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Level:</span> <strong>0{selectedObject.level}</strong></div>
-            
-            {selectedObject.category === 'Wall' ? (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Nodes:</span> <strong>{selectedObject.p1Id} ➔ {selectedObject.p2Id}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Length:</span> <strong style={{ color: '#4af626' }}>{selectedObject.length.toFixed(2)} m</strong></div>
-              </>
-            ) : (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Width:</span> <strong style={{ color: '#4af626' }}>{selectedObject.width.toFixed(2)} m</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Depth:</span> <strong style={{ color: '#4af626' }}>{selectedObject.depth.toFixed(2)} m</strong></div>
-              </>
-            )}
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Height:</span> <strong>{selectedObject.height.toFixed(2)} m</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#888' }}>Thickness:</span> <strong>{(selectedObject.thickness * 1000).toFixed(0)} mm</strong></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <span style={{ fontSize: '0.8rem', color: txtCol, fontWeight: 'bold' }}>Enable Cut</span>
+            <input type="checkbox" checked={clipping.enabled} onChange={(e) => setClipping({ enabled: e.target.checked })} style={{ cursor: 'pointer', accentColor: '#4af626' }} />
           </div>
+
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
+            {['y', 'x', 'z'].map(axis => (
+              <button 
+                key={axis} onClick={() => setClipping({ axis })} 
+                style={{ flex: 1, padding: '6px', borderRadius: '4px', border: `1px solid ${borderCol}`, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem', backgroundColor: clipping.axis === axis ? (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)') : 'transparent', color: clipping.axis === axis ? txtCol : dimCol }}
+              >
+                {axis.toUpperCase()} Cut
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.75rem', color: dimCol }}>
+            <span>Distance</span><span style={{ color: txtCol, fontWeight: 'bold' }}>{clipping.distance.toFixed(1)}m</span>
+          </div>
+          {/* Dynamic slider based on axis. Y cuts vertically, X/Z cut horizontally */}
+          <input 
+            type="range" min={clipping.axis === 'y' ? -5 : -25} max={clipping.axis === 'y' ? 15 : 25} step="0.1" value={clipping.distance} 
+            onChange={(e) => setClipping({ distance: Number(e.target.value) })} 
+            style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626', height: '4px', opacity: clipping.enabled ? 1 : 0.3 }} 
+            disabled={!clipping.enabled}
+          />
         </div>
       )}
 
-      {/* CANVAS CONTENT */}
-      <div style={{ width: '100%', height: '100%' }}>
-        {activeTab === 'data' ? generateQTO() : <Viewport3D />}
-      </div>
+      <div style={{ width: '100%', height: '100%' }}>{activeTab === 'data' ? generateQTO() : <Viewport3D />}</div>
     </div>
   );
 }
@@ -416,21 +435,24 @@ import useStore from '../../core/store';
 export default function Viewport3D() {
   const mountRef = useRef(null);
   
-  // Pull our new selection state into the viewer
-  const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject } = useStore(); 
+  // 🪄 Pull in the clipping state!
+  const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject, clipping } = useStore(); 
   
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
   const cameraRef = useRef(null);
-  const rendererRef = useRef(null);
+  const controlsRef = useRef(null);
+  const rendererRef = useRef(null); // Save renderer to dynamically toggle clipping
+
+  // 🪄 Create ONE persistent infinite math plane. (Starts facing down along Y-axis at 1.5m)
+  const clipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5));
 
   useEffect(() => {
     const currentMount = mountRef.current;
     if (!currentMount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(theme === 'dark' ? '#242424' : '#e0e0e0');
     sceneRef.current = scene;
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -441,12 +463,13 @@ export default function Viewport3D() {
 
     const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
     camera.position.set(20, 15, 20);
-    cameraRef.current = camera;
+    cameraRef.current = camera; 
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
-    currentMount.appendChild(renderer.domElement);
+    renderer.localClippingEnabled = clipping.enabled; // Enable clipping engine!
     rendererRef.current = renderer;
+    currentMount.appendChild(renderer.domElement);
 
     const labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
@@ -458,45 +481,32 @@ export default function Viewport3D() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-
-    const gridHelper = new THREE.GridHelper(50, 50, '#555555', '#444444');
-    gridHelperRef.current = gridHelper;
-    scene.add(gridHelper);
+    controlsRef.current = controls; 
 
     const group = new THREE.Group();
     scene.add(group);
     groupRef.current = group;
 
-    // --- 🪄 THE RAYCASTER (Virtual Laser Beam) 🪄 ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
     const onMouseClick = (event) => {
-      // Don't register clicks if we are rotating the camera (simple drag check)
       if (event.movementX > 2 || event.movementY > 2) return;
-
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
       raycaster.setFromCamera(mouse, camera);
 
-      // Check what the laser hits inside our geometry group
       const intersects = raycaster.intersectObjects(group.children, true);
-      
-      // Filter out lines and grid dots, only select objects with our custom 'isSelectable' tag
       const selectableIntersects = intersects.filter(i => i.object.userData?.isSelectable);
 
       if (selectableIntersects.length > 0) {
-        // Hit! Send the object's data up to the global store
         useStore.getState().setSelectedObject(selectableIntersects[0].object.userData);
       } else {
-        // Missed! Clicked on empty space, deselect.
         useStore.getState().setSelectedObject(null);
       }
     };
 
-    // Listen for clicks on the 3D Canvas
     renderer.domElement.addEventListener('click', onMouseClick);
 
     let animationFrameId;
@@ -508,10 +518,19 @@ export default function Viewport3D() {
     };
     animate();
 
+    const handleResize = () => {
+      camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+      labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
       renderer.domElement.removeEventListener('click', onMouseClick);
+      window.removeEventListener('resize', handleResize);
       if (currentMount && currentMount.contains(renderer.domElement)) currentMount.removeChild(renderer.domElement);
       if (currentMount && currentMount.contains(labelRenderer.domElement)) currentMount.removeChild(labelRenderer.domElement);
       renderer.dispose();
@@ -519,13 +538,34 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 🪄 LIVE SECTIONING EFFECT (Runs every time you touch the slider, without rebuilding geometry!)
   useEffect(() => {
-    if (!sceneRef.current || !gridHelperRef.current) return;
-    sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#e0e0e0');
-    gridHelperRef.current.material.color.set(theme === 'dark' ? '#555555' : '#aaaaaa');
+    if (!rendererRef.current) return;
+    
+    rendererRef.current.localClippingEnabled = clipping.enabled;
+
+    // Flip the infinite plane to match the chosen axis
+    if (clipping.axis === 'y') clipPlaneRef.current.normal.set(0, -1, 0); // Top Down
+    else if (clipping.axis === 'x') clipPlaneRef.current.normal.set(-1, 0, 0); // Side cut
+    else if (clipping.axis === 'z') clipPlaneRef.current.normal.set(0, 0, -1); // Front cut
+
+    // Move the plane!
+    clipPlaneRef.current.constant = clipping.distance;
+  }, [clipping]);
+
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#f5f5f5');
+    if (gridHelperRef.current) sceneRef.current.remove(gridHelperRef.current);
+    
+    const mainColor = theme === 'dark' ? '#555555' : '#ffffff';
+    const subColor = theme === 'dark' ? '#444444' : '#e0e0e0';
+    const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
+    gridHelperRef.current = gridHelper;
+    sceneRef.current.add(gridHelper);
   }, [theme]);
 
-  // REACTIVE DATA LOOP: Building the Geometry & Tagging it!
+  // Geometry Generation
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -534,61 +574,70 @@ export default function Viewport3D() {
     if (pluginOutputs.renderType === 'floorplan-grid') {
       const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
 
-      // 1. GRID LAYER
+      // 🪄 Attach the math plane to EVERY material so it knows how to cut!
+      const clipPlanes = [clipPlaneRef.current];
+
       if (pluginOutputs.coordinates) {
         const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-        const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2' });
-        
+        const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2', clippingPlanes: clipPlanes });
         pluginOutputs.coordinates.forEach(pt => {
           if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
             const dot = new THREE.Mesh(dotGeom, dotMat);
             dot.position.set(pt.x, pt.y, pt.z);
             group.add(dot);
-            
             const div = document.createElement('div');
-            div.className = 'grid-label';
-            div.textContent = pt.name;
-            const label = new CSS2DObject(div);
-            label.position.set(pt.x, pt.y, pt.z);
+            div.className = 'grid-label'; div.textContent = pt.name;
+            const label = new CSS2DObject(div); label.position.set(pt.x, pt.y, pt.z);
             group.add(label);
           }
         });
       }
 
-      // 2. SLABS LAYER
       if (pluginOutputs.slabs) {
         pluginOutputs.slabs.forEach((slab, index) => {
           if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
             const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
-            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8 });
+            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8, clippingPlanes: clipPlanes });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(slab.x, slab.y, slab.z);
-            
-            // TAG FOR RAYCASTER
             mesh.userData = { ...slab, id: `slab-${index}`, isSelectable: true, category: 'Slab' };
             group.add(mesh);
           }
         });
       }
 
-      // 3. WALLS LAYER
       if (pluginOutputs.walls) {
-        // 👇 FIX 1: Add 'index' to the forEach loop
         pluginOutputs.walls.forEach((wall, index) => {
           if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
             const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
-            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8 });
+            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8, clippingPlanes: clipPlanes });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(wall.x, wall.y, wall.z);
             mesh.rotation.y = wall.rotationY; 
-            
-            // 👇 FIX 2: Attach a unique 'id' using the index!
             mesh.userData = { ...wall, id: `wall-${index}`, isSelectable: true, category: 'Wall' };
-
             const edges = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true }));
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true, clippingPlanes: clipPlanes }));
             mesh.add(line);
-            
+            group.add(mesh);
+          }
+        });
+      }
+
+      if (pluginOutputs.openings) {
+        pluginOutputs.openings.forEach((opening, index) => {
+          if (visibility.levels[opening.level] && visibility.types[opening.typeId]) {
+            const geom = new THREE.BoxGeometry(opening.width, opening.height, opening.depth);
+            const mat = new THREE.MeshStandardMaterial({ 
+              color: opening.color, roughness: opening.opacity < 1 ? 0.1 : 0.8, metalness: opening.opacity < 1 ? 0.8 : 0.1,
+              transparent: opening.opacity < 1, opacity: opening.opacity, clippingPlanes: clipPlanes
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(opening.x, opening.y, opening.z);
+            mesh.rotation.y = opening.rotationY; 
+            mesh.userData = { ...opening, id: `opening-${index}`, isSelectable: true };
+            const edges = new THREE.EdgesGeometry(geom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.5, transparent: true, clippingPlanes: clipPlanes }));
+            mesh.add(line);
             group.add(mesh);
           }
         });
@@ -596,35 +645,107 @@ export default function Viewport3D() {
     }
   }, [pluginOutputs, theme, visibility]); 
 
-  // --- 💡 DYNAMIC HIGHLIGHTER (Runs whenever selection changes) ---
+  // Highlighter Logic
   useEffect(() => {
     if (!groupRef.current) return;
-    
     groupRef.current.children.forEach(child => {
-      // Make sure we only touch our selectable walls/slabs
       if (child.userData?.isSelectable && child.material) {
         if (selectedObject && child.userData.id === selectedObject.id) {
-          // GLOOOOW BLUE!
           child.material.emissive.setHex(0x3366ff);
           child.material.emissiveIntensity = 0.6;
         } else {
-          // Reset to normal
           child.material.emissive.setHex(0x000000);
         }
       }
     });
-  }, [selectedObject, pluginOutputs, visibility]); // Re-run if selection or geometry changes
+  }, [selectedObject, pluginOutputs, visibility]);
 
-  return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />;
+  const fitCameraToBox = (box) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxSize = Math.max(size.x, size.y, size.z);
+    const fitHeightDistance = maxSize / (2 * Math.atan((Math.PI * cameraRef.current.fov) / 360));
+    const fitWidthDistance = fitHeightDistance / cameraRef.current.aspect;
+    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
+    const direction = controlsRef.current.target.clone().sub(cameraRef.current.position).normalize().multiplyScalar(distance);
+    controlsRef.current.target.copy(center);
+    cameraRef.current.position.copy(controlsRef.current.target).sub(direction);
+    cameraRef.current.updateProjectionMatrix();
+  };
+
+  const handleZoomAll = () => {
+    if (!groupRef.current || groupRef.current.children.length === 0) return;
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    fitCameraToBox(box);
+  };
+
+  const handleZoomSelected = () => {
+    if (!selectedObject || !groupRef.current) return;
+    const selectedMesh = groupRef.current.children.find(child => child.userData?.id === selectedObject.id);
+    if (selectedMesh) fitCameraToBox(new THREE.Box3().setFromObject(selectedMesh));
+  };
+
+  const handleSetView = (viewType) => {
+    if (!cameraRef.current || !controlsRef.current || !groupRef.current) return;
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const distance = maxDim * 1.5;
+
+    controlsRef.current.target.copy(center);
+
+    if (viewType === 'top') cameraRef.current.position.set(center.x, center.y + distance, center.z + 0.1); 
+    if (viewType === 'front') cameraRef.current.position.set(center.x, center.y, center.z + distance);
+    if (viewType === 'left') cameraRef.current.position.set(center.x - distance, center.y, center.z);
+    if (viewType === 'iso') cameraRef.current.position.set(center.x + distance, center.y + distance, center.z + distance);
+    
+    cameraRef.current.updateProjectionMatrix();
+  };
+
+  const isDark = theme === 'dark';
+  const toolbarStyle = {
+    position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+    backgroundColor: isDark ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(10px)', border: `1px solid ${isDark ? '#333' : '#ddd'}`,
+    borderRadius: '8px', display: 'flex', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
+  };
+
+  const btnStyle = {
+    background: 'transparent', border: 'none', color: isDark ? '#aaa' : '#666', cursor: 'pointer',
+    padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s'
+  };
+
+  return (
+    <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div style={toolbarStyle}>
+        <button onClick={() => handleSetView('top')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Top</button>
+        <button onClick={() => handleSetView('front')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Front</button>
+        <button onClick={() => handleSetView('left')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Left</button>
+        <button onClick={() => handleSetView('iso')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Iso</button>
+        <div style={{ width: '1px', backgroundColor: isDark ? '#444' : '#ccc', margin: '0 4px' }} />
+        <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>🔍 Fit All</button>
+        {selectedObject && (
+          <button onClick={handleZoomSelected} style={{...btnStyle, color: '#3366ff'}} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
+            🎯 Fit Selected
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 ```
 
 **C:\Projects\bimcube\src\components\ui\ColorInput.jsx**
 ```text
+import useStore from '../../core/store';
+
 export default function ColorInput({ label, value, onChange }) {
+  const { theme } = useStore();
   return (
-    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{label}</span>
+    <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.75rem', color: theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>{label}</span>
       <input 
         type="color" 
         value={value} 
@@ -638,16 +759,19 @@ export default function ColorInput({ label, value, onChange }) {
 
 **C:\Projects\bimcube\src\components\ui\NumberInput.jsx**
 ```text
+import useStore from '../../core/store';
+
 export default function NumberInput({ label, value, onChange }) {
+  const { theme } = useStore();
+  const isDark = theme === 'dark';
+
   return (
-    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{label}</span>
+    <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.75rem', color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>{label}</span>
       <input 
-        type="number" 
-        step="0.01"
-        value={value} 
+        type="number" step="0.01" value={value} 
         onChange={(e) => onChange(Number(e.target.value))} 
-        style={{ width: '80px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#111', color: '#4af626', fontWeight: 'bold', fontFamily: 'monospace', outline: 'none' }} 
+        style={{ width: '60px', padding: '2px 6px', borderRadius: '4px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`, backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)', color: isDark ? '#ffffff' : '#111111', fontWeight: 'bold', fontFamily: 'monospace', outline: 'none', fontSize: '0.8rem' }} 
       />
     </div>
   );
@@ -656,21 +780,22 @@ export default function NumberInput({ label, value, onChange }) {
 
 **C:\Projects\bimcube\src\components\ui\Slider.jsx**
 ```text
+import useStore from '../../core/store';
+
 export default function Slider({ label, min, max, step, value, onChange }) {
+  const { theme } = useStore();
+  const isDark = theme === 'dark';
+
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#ccc' }}>
+    <div style={{ marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.75rem', color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>
         <span>{label}</span>
-        <span style={{ color: '#4af626', fontWeight: 'bold' }}>{value}</span>
+        <span style={{ color: isDark ? '#ffffff' : '#111111', fontWeight: 'bold' }}>{value}</span>
       </div>
       <input 
-        type="range" 
-        min={min} 
-        max={max} 
-        step={step} 
-        value={value} 
+        type="range" min={min} max={max} step={step} value={value} 
         onChange={(e) => onChange(Number(e.target.value))} 
-        style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626' }} 
+        style={{ width: '100%', cursor: 'pointer', accentColor: isDark ? '#ffffff' : '#111111', height: '4px' }} 
       />
     </div>
   );
@@ -687,18 +812,17 @@ const useStore = create((set) => ({
   pluginOutputs: {},  
   theme: 'dark', 
   
-  // --- MULTI-DIMENSIONAL VISIBILITY MATRIX ---
   visibility: {
-    levels: { 0: true, 1: true, 2: true, 3: true },
-    types: {
-      // 👇 CHANGED: Grid is now set to false by default!
-      Grid: false, WE01: true, WE02: true, WI01: true, WI02: true, WI03: true, SL01: true, SL02: true
-    }
+    levels: {},
+    types: {}
   },
 
-  // --- INTERACTIVE SELECTION STATE ---
   selectedObject: null,
   setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
+
+  // 🪄 NEW: LIVE GPU SECTIONING STATE
+  clipping: { enabled: false, axis: 'y', distance: 1.5 }, // 1.5m is a standard architectural floorplan cut height
+  setClipping: (updates) => set((state) => ({ clipping: { ...state.clipping, ...updates } })),
 
   toggleLevel: (levelStr) => set((state) => ({
     visibility: { ...state.visibility, levels: { ...state.visibility.levels, [levelStr]: !state.visibility.levels[levelStr] } }
@@ -720,10 +844,17 @@ const useStore = create((set) => ({
 
   setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
   
-  setPluginOutputs: (data) => set(() => ({ 
-    pluginOutputs: data,
-    selectedObject: null // Clear selection when generating a new layout!
-  })),
+  setPluginOutputs: (data) => set((state) => {
+    const newLevels = { ...state.visibility.levels };
+    const newTypes = { ...state.visibility.types };
+
+    if (data.meta) {
+       data.meta.levels.forEach(lvl => { if (newLevels[lvl] === undefined) newLevels[lvl] = true; });
+       data.meta.types.forEach(type => { if (newTypes[type] === undefined) newTypes[type] = type === 'Grid' ? false : true; });
+    }
+
+    return { pluginOutputs: data, visibility: { levels: newLevels, types: newTypes }, selectedObject: null };
+  }),
   
   clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
 }));
@@ -766,88 +897,40 @@ export function compute(inputs) {
 
 **C:\Projects\bimcube\src\plugins\FloorplanGrid\compute.js**
 ```text
-const materialTypes = {
-    'WE01': { priority: 1, thickness: 0.45, color: '#d32f2f', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WE02': { priority: 3, thickness: 0.40, color: '#f57c00', type: 'exterior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI01': { priority: 4, thickness: 0.42, color: '#795548', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI02': { priority: 2, thickness: 0.40, color: '#9e9e9e', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'WI03': { priority: 5, thickness: 0.12, color: '#00acc1', type: 'interior', zOffsetBottom: 0, zOffsetTop: 0 }, 
-    'SL01': { thickness: 0.30, color: '#8d6e63', type: 'slab', zOffsetBottom: 0, zOffsetTop: 0 },    
-    'SL02': { thickness: 0.25, color: '#bdbdbd', type: 'slab', zOffsetBottom: 0, zOffsetTop: 0.001 } 
-};
-
-const layoutBlueprint = {
-    slabs: [
-        { p1: 'Z0-A0', p2: 'Z0-I8', mat: 'SL01' },
-        { p1: 'Z0-C3', p2: 'Z0-G5', mat: 'SL02' }
-    ],
-    walls: [
-        { p1: 'Z0-A0', p2: 'Z0-A8', mat: 'WE01' }, { p1: 'Z0-I8', p2: 'Z0-I0', mat: 'WE01' },
-        { p1: 'Z0-A8', p2: 'Z0-I8', mat: 'WE02' }, { p1: 'Z0-I0', p2: 'Z0-A0', mat: 'WE02' },
-        { p1: 'Z0-A4', p2: 'Z0-C4', mat: 'WI01' }, { p1: 'Z0-G4', p2: 'Z0-I4', mat: 'WI01' },
-        { p1: 'Z0-E0', p2: 'Z0-E1', mat: 'WI01' }, { p1: 'Z0-E7', p2: 'Z0-E8', mat: 'WI01' },
-        { p1: 'Z0-D1', p2: 'Z0-D3', mat: 'WI02' }, { p1: 'Z0-D3', p2: 'Z0-C3', mat: 'WI02' },
-        { p1: 'Z0-C3', p2: 'Z0-C7', mat: 'WI02' }, { p1: 'Z0-C7', p2: 'Z0-F7', mat: 'WI02' },
-        { p1: 'Z0-F7', p2: 'Z0-F5', mat: 'WI02' }, { p1: 'Z0-F5', p2: 'Z0-G5', mat: 'WI02' },
-        { p1: 'Z0-G5', p2: 'Z0-G3', mat: 'WI02' }, { p1: 'Z0-G3', p2: 'Z0-F3', mat: 'WI02' },
-        { p1: 'Z0-F3', p2: 'Z0-F1', mat: 'WI02' }, { p1: 'Z0-F1', p2: 'Z0-D1', mat: 'WI02' },
-        { p1: 'Z0-C0', p2: 'Z0-C2', mat: 'WI03' }, { p1: 'Z0-C2', p2: 'Z0-D2', mat: 'WI03' },
-        { p1: 'Z0-C8', p2: 'Z0-C6', mat: 'WI03' }, { p1: 'Z0-C6', p2: 'Z0-D6', mat: 'WI03' },
-        { p1: 'Z0-F1', p2: 'Z0-G1', mat: 'WI03' }, { p1: 'Z0-G0', p2: 'Z0-G3', mat: 'WI03' },
-        { p1: 'Z0-G5', p2: 'Z0-G8', mat: 'WI03' }, { p1: 'Z0-F7', p2: 'Z0-G7', mat: 'WI03' },
-        { p1: 'Z0-H0', p2: 'Z0-H4', mat: 'WI03' }, { p1: 'Z0-H4', p2: 'Z0-H8', mat: 'WI03' },
-        { p1: 'Z0-H1', p2: 'Z0-H4', mat: 'WI03', offsetP1: { x: -1 }, offsetP2: { x: -1 } },
-        { p1: 'Z0-H4', p2: 'Z0-H7', mat: 'WI03', offsetP1: { x: -1 }, offsetP2: { x: -1 } }
-    ]
-};
+import blueprint from './blueprint.json';
 
 export function compute(inputs) {
-    // 1. Read the explicit floor heights
     const { widthX, depthY, h00, h01, h02 } = inputs;
     
-    // 2. Calculate CUMULATIVE Absolute Z Elevations
-    const zLevels = [
-        0,                        // Level 00 (Ground)
-        h00,                      // Level 01
-        h00 + h01,                // Level 02
-        h00 + h01 + h02           // Level 03 (Roof)
-    ];
+    const zLevels = [ 0, h00, h00 + h01, h00 + h01 + h02 ];
+    
+    const halfX = widthX / 2;
+    const E = halfX - 1.35;
+    
+    const uAxis = { 
+        'A': 0, 'B': 3.72, 'C': E - 3.60, 'D': E - 1.58, 
+        'E': E, 'F': E + 1.58, 'G': E + 3.60, 'H': widthX - 3.65, 'I': widthX 
+    };
 
-    const Ex = widthX / 2;
-    const B = Ex / 3;
-    const uAxis = { 'A': 0, 
-                    'B': B, 
-                    'C': B + B, 
-                    'D': Ex - 2, 
-                    'E': Ex, 
-                    'F': Ex + 2, 
-                    'G': Ex + B, 
-                    'H': Ex + B + B, 
-                    'I': widthX 
-                };
-    const Ey = depthY / 2;
-    const vAxis = { '0': 0, 
-                    '1': Ey - 3, 
-                    '2': Ey - 2.2, 
-                    '3': Ey - 0.5, 
-                    '4': Ey, 
-                    '5': Ey + 0.5, 
-                    '6': Ey + 2.2, 
-                    '7': Ey + 3, 
-                    '8': depthY 
-                };
+    const halfY = depthY / 2;
+    const vAxis = { 
+        '0': 0, '1': halfY - 4.25, '2': halfY - 2.77, '3': halfY - 1.30, 
+        '4': halfY, '5': halfY + 0.76, '6': halfY + 2.77, '7': halfY + 4.25, '8': depthY 
+    };
 
     const points = [];
     const pointMap = {}; 
+    const uniqueLevels = new Set();
+    const uniqueTypes = new Set(['Grid']); 
+    const typeColors = { 'Grid': '#00d1b2' };
 
     zLevels.forEach((elevation, index) => {
+        uniqueLevels.add(index);
         for (const [uName, xVal] of Object.entries(uAxis)) {
             for (const [vName, zVal] of Object.entries(vAxis)) {
                 const id = `Z${index}-${uName}${vName}`; 
                 const centeredX = xVal - (widthX / 2);
                 const centeredZ = zVal - (depthY / 2);
-                
-                // TAGGED WITH LEVEL AND TYPE
                 const pointData = { id, name: `${uName}${vName}`, x: centeredX, y: elevation, z: centeredZ, level: index, typeId: 'Grid' };
                 points.push(pointData);
                 pointMap[id] = pointData; 
@@ -855,58 +938,65 @@ export function compute(inputs) {
         }
     });
 
-    const generatedSlabs = layoutBlueprint.slabs.map(slabDef => {
+    const generatedSlabs = (blueprint.slabs || []).map(slabDef => {
         const p1 = pointMap[slabDef.p1];
         const p2 = pointMap[slabDef.p2];
-        const mat = materialTypes[slabDef.mat];
+        const mat = blueprint.materialTypes[slabDef.mat];
         if (!p1 || !p2) return null;
 
         const storeyIdx = parseInt(slabDef.p1.split('-')[0].substring(1));
-        const width = Math.abs(p2.x - p1.x);
-        const depth = Math.abs(p2.z - p1.z);
         const midX = (p1.x + p2.x) / 2;
         const midZ = (p1.z + p2.z) / 2;
         const midY = p1.y - (mat.thickness / 2) + (mat.zOffsetTop || 0); 
+        
+        uniqueTypes.add(slabDef.mat);
+        typeColors[slabDef.mat] = mat.color;
 
-        // TAGGED WITH LEVEL AND TYPE
-        return { width, depth, height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color, level: storeyIdx, typeId: slabDef.mat };
+        return { width: Math.abs(p2.x - p1.x), depth: Math.abs(p2.z - p1.z), height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color, level: storeyIdx, typeId: slabDef.mat };
     }).filter(Boolean);
 
-    const rawWalls = layoutBlueprint.walls.map((wallDef, index) => {
+    const rawWalls = (blueprint.walls || []).map((wallDef, index) => {
         const p1 = pointMap[wallDef.p1];
         const p2 = pointMap[wallDef.p2];
-        const mat = materialTypes[wallDef.mat];
+        const mat = blueprint.materialTypes[wallDef.mat];
         if (!p1 || !p2) return null;
 
         const storeyIdx = parseInt(wallDef.p1.split('-')[0].substring(1));
-        const currentFloorHeight = zLevels[storeyIdx + 1] - zLevels[storeyIdx];
-
+        
         const p1X = p1.x + (wallDef.offsetP1?.x || 0);
-        const p1Z = p1.z + (wallDef.offsetP1?.z || 0);
+        const p1Z = p1.z + (wallDef.offsetP1?.z || 0); 
         const p2X = p2.x + (wallDef.offsetP2?.x || 0);
         const p2Z = p2.z + (wallDef.offsetP2?.z || 0);
+
+        const currentFloorHeight = mat.fixedHeight !== undefined 
+            ? mat.fixedHeight 
+            : (zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : 3.0 - 0.42); 
 
         const dx = p2X - p1X;
         const dz = p2Z - p1Z;
         const length = Math.sqrt((dx * dx) + (dz * dz)); 
-        const isHorizontal = Math.abs(dx) > Math.abs(dz);
+        const dirX = dx / length;
+        const dirZ = dz / length;
 
-        // TAGGED WITH LEVEL AND TYPE
+        uniqueTypes.add(wallDef.mat);
+        typeColors[wallDef.mat] = mat.color;
+
         return {
-            id: `W${index}`, p1Id: wallDef.p1, p2Id: wallDef.p2,
-            p1X, p1Z, p2X, p2Z, dx, dz, length, isHorizontal, mat, currentFloorHeight,
+            id: `W${index}`, p1Id: wallDef.p1, p2Id: wallDef.p2, p1X, p1Z, p2X, p2Z, 
+            dx, dz, dirX, dirZ, length, isHorizontal: Math.abs(dx) > Math.abs(dz), mat, currentFloorHeight,
             baseLevel: p1.y + (mat.zOffsetBottom || 0), level: storeyIdx, typeId: wallDef.mat
         };
     }).filter(Boolean);
 
     const nodeConnections = {}; 
-    rawWalls.forEach(wall => {
-        if (!nodeConnections[wall.p1Id]) nodeConnections[wall.p1Id] = [];
-        if (!nodeConnections[wall.p2Id]) nodeConnections[wall.p2Id] = [];
+    rawWalls.forEach(w => {
+        if (!nodeConnections[w.p1Id]) nodeConnections[w.p1Id] = [];
+        if (!nodeConnections[w.p2Id]) nodeConnections[w.p2Id] = [];
     });
 
     const isPointOnGridSegment = (nodeId, wall) => {
         const node = pointMap[nodeId];
+        if (node.level !== wall.level) return false; 
         const wP1 = pointMap[wall.p1Id];
         const wP2 = pointMap[wall.p2Id];
         const d1 = Math.hypot(node.x - wP1.x, node.z - wP1.z);
@@ -917,10 +1007,8 @@ export function compute(inputs) {
 
     Object.keys(nodeConnections).forEach(nodeId => {
         rawWalls.forEach(wall => {
-            if (isPointOnGridSegment(nodeId, wall)) {
-                if (!nodeConnections[nodeId].some(w => w.id === wall.id)) {
-                    nodeConnections[nodeId].push(wall);
-                }
+            if (isPointOnGridSegment(nodeId, wall) && !nodeConnections[nodeId].some(w => w.id === wall.id)) {
+                nodeConnections[nodeId].push(wall);
             }
         });
     });
@@ -932,57 +1020,363 @@ export function compute(inputs) {
     };
 
     const generatedWalls = rawWalls.map(wall => {
-        let p1Extension = 0;
-        let p2Extension = 0;
-
-        const p1Competitors = nodeConnections[wall.p1Id].filter(w => w.id !== wall.id);
-        if (p1Competitors.length > 0) {
-            let dominantWall = p1Competitors[0];
-            for (let i = 1; i < p1Competitors.length; i++) {
-                if (winsCorner(p1Competitors[i], dominantWall)) dominantWall = p1Competitors[i];
-            }
-            p1Extension = winsCorner(wall, dominantWall) ? (dominantWall.mat.thickness / 2) : -(dominantWall.mat.thickness / 2);
+        let p1Ext = 0, p2Ext = 0;
+        
+        const p1Comp = nodeConnections[wall.p1Id].filter(w => w.id !== wall.id);
+        if (p1Comp.length > 0) {
+            let dom = p1Comp[0];
+            for (let i = 1; i < p1Comp.length; i++) if (winsCorner(p1Comp[i], dom)) dom = p1Comp[i];
+            p1Ext = winsCorner(wall, dom) ? (dom.mat.thickness / 2) : -(dom.mat.thickness / 2);
+        }
+        
+        const p2Comp = nodeConnections[wall.p2Id].filter(w => w.id !== wall.id);
+        if (p2Comp.length > 0) {
+            let dom = p2Comp[0];
+            for (let i = 1; i < p2Comp.length; i++) if (winsCorner(p2Comp[i], dom)) dom = p2Comp[i];
+            p2Ext = winsCorner(wall, dom) ? (dom.mat.thickness / 2) : -(dom.mat.thickness / 2);
         }
 
-        const p2Competitors = nodeConnections[wall.p2Id].filter(w => w.id !== wall.id);
-        if (p2Competitors.length > 0) {
-            let dominantWall = p2Competitors[0];
-            for (let i = 1; i < p2Competitors.length; i++) {
-                if (winsCorner(p2Competitors[i], dominantWall)) dominantWall = p2Competitors[i];
-            }
-            p2Extension = winsCorner(wall, dominantWall) ? (dominantWall.mat.thickness / 2) : -(dominantWall.mat.thickness / 2);
-        }
+        const finalLen = wall.length + p1Ext + p2Ext;
+        const newP1X = wall.p1X - (wall.dirX * p1Ext);
+        const newP1Z = wall.p1Z - (wall.dirZ * p1Ext);
+        const newP2X = wall.p2X + (wall.dirX * p2Ext);
+        const newP2Z = wall.p2Z + (wall.dirZ * p2Ext);
+        const topLvl = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
 
-        const finalLength = wall.length + p1Extension + p2Extension;
-        const dirX = wall.dx / wall.length;
-        const dirZ = wall.dz / wall.length;
-        const newP1X = wall.p1X - (dirX * p1Extension);
-        const newP1Z = wall.p1Z - (dirZ * p1Extension);
-        const newP2X = wall.p2X + (dirX * p2Extension);
-        const newP2Z = wall.p2Z + (dirZ * p2Extension);
-        const midX = (newP1X + newP2X) / 2;
-        const midZ = (newP1Z + newP2Z) / 2;
-
-        const topLevel = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
-        const midY = wall.baseLevel + ((topLevel - wall.baseLevel) / 2);
-        const rotationY = -Math.atan2(wall.dz, wall.dx);
-
-        // TAGGED WITH LEVEL AND TYPE
         return { 
-            length: finalLength, height: topLevel - wall.baseLevel, thickness: wall.mat.thickness, 
-            x: midX, y: midY, z: midZ, rotationY, color: wall.mat.color,
-            level: wall.level, typeId: wall.typeId 
+            id: wall.id, length: finalLen, height: topLvl - wall.baseLevel, thickness: wall.mat.thickness, 
+            x: (newP1X + newP2X) / 2, y: wall.baseLevel + ((topLvl - wall.baseLevel) / 2), z: (newP1Z + newP2Z) / 2, 
+            rotationY: -Math.atan2(wall.dz, wall.dx), dirX: wall.dirX, dirZ: wall.dirZ, 
+            color: wall.mat.color, level: wall.level, typeId: wall.typeId, baseLevel: wall.baseLevel
         };
     });
 
+    // 🪄 STEP 1: GENERATE WINDOWS FIRST!
+    const generatedOpenings = (blueprint.openings || []).map((openingDef, index) => {
+        const p1 = pointMap[openingDef.gridStart];
+        const p2 = pointMap[openingDef.gridEnd];
+        const opType = blueprint.openingTypes[openingDef.type];
+        if (!p1 || !p2 || !opType) return null;
+
+        const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
+        const midX = (p1.x + p2.x) / 2;
+        const midZ = (p1.z + p2.z) / 2;
+
+        uniqueTypes.add(openingDef.type);
+        typeColors[openingDef.type] = opType.color;
+
+        const hostRawWall = rawWalls.find(w => {
+            if (w.level !== storeyIdx) return false;
+            const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
+            const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
+            return Math.abs((d1 + d2) - w.length) < 0.5; // Very safe tolerance
+        });
+
+        const hostWall = hostRawWall ? generatedWalls.find(w => w.id === hostRawWall.id) : null;
+        let rotationY = 0, tangentX = 0, tangentZ = 0, thickness = 0.2, baseLevel = p1.y;
+
+        if (hostWall) {
+            rotationY = hostWall.rotationY; tangentX = hostWall.dirX; tangentZ = hostWall.dirZ;
+            thickness = hostWall.thickness + 0.6; 
+            baseLevel = hostWall.baseLevel;
+        } else {
+            const dx = p2.x - p1.x; const dz = p2.z - p1.z;
+            const len = Math.hypot(dx, dz);
+            tangentX = dx / len; tangentZ = dz / len;
+            rotationY = -Math.atan2(dz, dx);
+        }
+
+        return {
+            id: `O${index}`, width: opType.width, height: opType.height, depth: thickness, 
+            x: midX, y: baseLevel + opType.sill + (opType.height / 2), z: midZ, 
+            rotationY, dirX: tangentX, dirZ: tangentZ, 
+            color: opType.color, opacity: opType.opacity, level: storeyIdx, typeId: openingDef.type, category: opType.category
+        };
+    }).filter(Boolean);
+
+    // 🪄 STEP 2: GENERATE FACADES (Using the openings to map gaps!)
+    const generatedFacades = [];
+    (blueprint.facades || []).forEach((facadeDef, fIndex) => {
+        const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
+        const p2 = pointMap[`Z0-${facadeDef.gridEnd}`];
+        const mat = blueprint.materialTypes[facadeDef.mat];
+        if (!p1 || !p2) return;
+
+        const p1X = p1.x + (facadeDef.offsetX || 0);
+        const p1Z = p1.z + (facadeDef.offsetZ || 0); 
+        const p2X = p2.x + (facadeDef.offsetX || 0);
+        const p2Z = p2.z + (facadeDef.offsetZ || 0);
+
+        const rawDx = p2X - p1X;
+        const rawDz = p2Z - p1Z;
+        const rawLen = Math.hypot(rawDx, rawDz); 
+        const dirX = rawDx / rawLen;
+        const dirZ = rawDz / rawLen;
+
+        const ext = Math.abs(facadeDef.offsetX || facadeDef.offsetZ || 0);
+        const finalP1X = p1X - (dirX * ext);
+        const finalP1Z = p1Z - (dirZ * ext);
+        const finalP2X = p2X + (dirX * ext);
+        const finalP2Z = p2Z + (dirZ * ext);
+
+        const finalDx = finalP2X - finalP1X;
+        const finalDz = finalP2Z - finalP1Z;
+        const finalLength = Math.hypot(finalDx, finalDz);
+        const rotationY = -Math.atan2(finalDz, finalDx);
+
+        uniqueTypes.add(facadeDef.mat);
+        typeColors[facadeDef.mat] = mat.color;
+
+        const gap = 0.02; 
+        const generatePanels = (bandName, dStart, dEnd, yStart, yEnd, panelW, color, opacity, lvl) => {
+            let d = dStart;
+            let pIndex = 0;
+            const h = yEnd - yStart;
+            if (h <= 0 || dEnd - dStart <= 0) return; 
+            const midY = yStart + h / 2;
+            
+            while (d < dEnd - 0.001) { 
+                const w = Math.min(panelW, dEnd - d);
+                const cx = finalP1X + dirX * (d + w / 2);
+                const cz = finalP1Z + dirZ * (d + w / 2);
+                
+                generatedFacades.push({
+                    id: `CW-${fIndex}-${bandName}-${pIndex}-${Math.round(d*10)}`,
+                    length: w, height: h, thickness: mat.thickness,
+                    x: cx, y: midY, z: cz,
+                    rotationY, dirX, dirZ, color, opacity, level: lvl, typeId: facadeDef.mat, baseLevel: 0
+                });
+                d += w + gap;
+                pIndex++;
+            }
+        };
+
+        if (facadeDef.mat === 'CW2') {
+            const topLevel = zLevels[3] + 0.8;
+            generatedFacades.push({ 
+                id: `CW2-${fIndex}`, length: finalLength, height: topLevel, thickness: mat.thickness, 
+                x: (finalP1X + finalP2X) / 2, y: topLevel / 2, z: (finalP1Z + finalP2Z) / 2, 
+                rotationY, dirX, dirZ, color: mat.color, opacity: 1, level: 0, typeId: facadeDef.mat 
+            });
+            return;
+        }
+
+        if (facadeDef.mat === 'CW1') {
+            generatePanels('L0-Glass', 0, finalLength, 0, 2.4, 2.4, '#e0f7fa', 0.3, 0);
+            generatePanels('L0-Span', 0, finalLength, 2.4, zLevels[1], 2.4, mat.color, 1, 0);
+
+            [1, 2].forEach(lvl => {
+                const floorBase = zLevels[lvl];
+                const windowTop = floorBase + 2.4; 
+                
+                // 🪄 FIX 2: Level 2 Spandrel merges completely with the Parapet!
+                const nextFloorBase = (lvl === 2) ? (zLevels[3] + 0.8) : zLevels[lvl+1]; 
+
+                // 🪄 FIX 1: Filter windows dynamically and calculate negative space array gaps!
+                const floorOpenings = generatedOpenings.filter(op => {
+                    if (op.level !== lvl) return false;
+                    
+                    // Check if opening sits on this un-offset facade line (0.5m tolerance is perfectly safe)
+                    const opD1 = Math.hypot(op.x - p1.x, op.z - p1.z);
+                    const opD2 = Math.hypot(op.x - p2.x, op.z - p2.z);
+                    if (Math.abs((opD1 + opD2) - rawLen) > 0.5) return false;
+                    
+                    op.facadeD1 = opD1 + ext; 
+                    return true;
+                }).map(op => ({
+                    start: Math.max(0, op.facadeD1 - (op.width / 2)),
+                    end: Math.min(finalLength, op.facadeD1 + (op.width / 2))
+                })).sort((a, b) => a.start - b.start);
+
+                // Array count = window count + 1!
+                let currentD = 0;
+                floorOpenings.forEach(op => {
+                    if (op.start > currentD) {
+                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                    }
+                    currentD = Math.max(currentD, op.end);
+                });
+                
+                // Fill the final gap to the edge of the facade
+                if (currentD < finalLength) {
+                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                }
+
+                // Continuous horizontal spandrel above the windows
+                generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, 2.4, mat.color, 1, lvl);
+            });
+        }
+    });
+
     return {
-        description: `Cumulative Elevations & Layers`,
+        description: `Constructable BIM with Arrayed Panel Facades`,
         renderType: 'floorplan-grid', 
         dimensions: { widthX, depthY },
-        coordinates: points,
-        slabs: generatedSlabs,
-        walls: generatedWalls
+        meta: { levels: Array.from(uniqueLevels).sort(), types: Array.from(uniqueTypes).sort(), colors: typeColors },
+        coordinates: points, slabs: generatedSlabs, 
+        walls: [...generatedWalls, ...generatedFacades], 
+        openings: generatedOpenings
     };
+}
+```
+
+**C:\Projects\bimcube\src\plugins\FloorplanGrid\blueprint.json**
+```text
+{
+  "materialTypes": {
+    "WE1": { "priority": 1, "thickness": 0.46, "color": "#d32f2f", "type": "exterior" },
+    "WE2": { "priority": 2, "thickness": 0.42, "color": "#f57c00", "type": "exterior" },
+    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0, "fixedHeight": 0.5 },
+    "WI1": { "priority": 3, "thickness": 0.40, "color": "#9e9e9e", "type": "concrete_core" },
+    "WI2": { "priority": 4, "thickness": 0.42, "color": "#795548", "type": "timber_loadbearing" },
+    "WI3": { "priority": 5, "thickness": 0.10, "color": "#eeeeee", "type": "drywall" },
+    "CW1": { "priority": 10, "thickness": 0.15, "color": "#cfd8dc", "type": "curtain_wall_complex" },
+    "CW2": { "priority": 10, "thickness": 0.10, "color": "#fafafa", "type": "curtain_wall_plaster" },
+    "SF1": { "thickness": 0.60, "color": "#5d4037", "type": "foundation" },
+    "SL1": { "thickness": 0.42, "color": "#8d6e63", "type": "timber_slab" },
+    "SR1": { "thickness": 0.62, "color": "#37474f", "type": "roof_slab", "zOffsetTop": 0.20 },
+    "ST1": { "thickness": 1.50, "color": "#ffca28", "type": "stairs", "zOffsetTop": 1.5 }
+  },
+  "openingTypes": {
+    "OD1": { "width": 1.2, "height": 2.2, "sill": 0.0, "color": "#5c4033", "category": "Door", "opacity": 1.0 },
+    "OD2": { "width": 0.9, "height": 2.2, "sill": 0.0, "color": "#8b5a2b", "category": "Door", "opacity": 1.0 },
+    "OD3": { "width": 0.8, "height": 2.0, "sill": 0.0, "color": "#d7ccc8", "category": "Door", "opacity": 1.0 },
+    "OW1": { "width": 1.4, "height": 2.4, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.4 },
+    "OW2": { "width": 2.0, "height": 2.4, "sill": 0.0, "color": "#87ceeb", "category": "Window", "opacity": 0.4 }
+  },
+  "slabs": [
+    { "p1": "Z0-A0", "p2": "Z0-I8", "mat": "SF1" },
+    
+    { "p1": "Z1-A0", "p2": "Z1-C8", "mat": "SL1" }, { "p1": "Z1-C0", "p2": "Z1-D3", "mat": "SL1" },
+    { "p1": "Z1-C5", "p2": "Z1-D8", "mat": "SL1" }, { "p1": "Z1-D0", "p2": "Z1-F1", "mat": "SL1" },
+    { "p1": "Z1-D7", "p2": "Z1-F8", "mat": "SL1" }, { "p1": "Z1-F0", "p2": "Z1-G3", "mat": "SL1" },
+    { "p1": "Z1-G5", "p2": "Z1-G8", "mat": "SL1" }, { "p1": "Z1-G0", "p2": "Z1-I8", "mat": "SL1" },
+    { "p1": "Z1-C3", "p2": "Z1-G5", "mat": "WI1" },
+    { "p1": "Z1-D5", "p2": "Z1-D6", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F7", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F5", "mat": "ST1" },
+    { "p1": "Z1-F2", "p2": "Z1-G8", "mat": "SL1" }, 
+
+    { "p1": "Z2-A0", "p2": "Z2-C8", "mat": "SL1" }, { "p1": "Z2-C0", "p2": "Z2-D3", "mat": "SL1" },
+    { "p1": "Z2-C5", "p2": "Z2-D8", "mat": "SL1" }, { "p1": "Z2-D0", "p2": "Z2-F1", "mat": "SL1" },
+    { "p1": "Z2-D7", "p2": "Z2-F8", "mat": "SL1" }, { "p1": "Z2-F0", "p2": "Z2-G3", "mat": "SL1" },
+    { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "SL1" }, { "p1": "Z2-G0", "p2": "Z2-I8", "mat": "SL1" },
+    { "p1": "Z2-C3", "p2": "Z2-G5", "mat": "WI1" },
+    { "p1": "Z2-D5", "p2": "Z2-D6", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F7", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F5", "mat": "ST1" },
+    { "p1": "Z2-F2", "p2": "Z2-G8", "mat": "SL1" }, 
+
+    { "p1": "Z3-A0", "p2": "Z3-I8", "mat": "SR1" }
+  ],
+  "walls": [
+    { "p1": "Z0-A0", "p2": "Z0-A8", "mat": "WE1" }, { "p1": "Z0-I8", "p2": "Z0-I0", "mat": "WE1" },
+    { "p1": "Z0-A8", "p2": "Z0-I8", "mat": "WE2" }, { "p1": "Z0-I0", "p2": "Z0-A0", "mat": "WE2" },
+    { "p1": "Z0-A4", "p2": "Z0-C4", "mat": "WI2" }, { "p1": "Z0-G4", "p2": "Z0-I4", "mat": "WI2" },
+    { "p1": "Z0-E0", "p2": "Z0-E1", "mat": "WI2" }, { "p1": "Z0-E7", "p2": "Z0-E8", "mat": "WI2" },
+    { "p1": "Z0-C3", "p2": "Z0-C5", "mat": "WI1" }, { "p1": "Z0-C5", "p2": "Z0-D5", "mat": "WI1" },
+    { "p1": "Z0-D5", "p2": "Z0-D7", "mat": "WI1" }, { "p1": "Z0-D7", "p2": "Z0-F7", "mat": "WI1" },
+    { "p1": "Z0-F7", "p2": "Z0-F5", "mat": "WI1" }, { "p1": "Z0-F5", "p2": "Z0-G5", "mat": "WI1" },
+    { "p1": "Z0-G5", "p2": "Z0-G3", "mat": "WI1" }, { "p1": "Z0-G3", "p2": "Z0-F3", "mat": "WI1" },
+    { "p1": "Z0-F3", "p2": "Z0-F1", "mat": "WI1" }, { "p1": "Z0-F1", "p2": "Z0-D1", "mat": "WI1" },
+    { "p1": "Z0-D1", "p2": "Z0-D3", "mat": "WI1" }, { "p1": "Z0-E3", "p2": "Z0-C3", "mat": "WI1" },
+
+    { "p1": "Z1-A0", "p2": "Z1-A8", "mat": "WE1" }, { "p1": "Z1-I8", "p2": "Z1-I0", "mat": "WE1" },
+    { "p1": "Z1-A8", "p2": "Z1-I8", "mat": "WE2" }, { "p1": "Z1-I0", "p2": "Z1-A0", "mat": "WE2" },
+    { "p1": "Z1-A4", "p2": "Z1-C4", "mat": "WI2" }, { "p1": "Z1-G4", "p2": "Z1-I4", "mat": "WI2" },
+    { "p1": "Z1-E0", "p2": "Z1-E1", "mat": "WI2" }, { "p1": "Z1-E7", "p2": "Z1-E8", "mat": "WI2" },
+    { "p1": "Z1-C3", "p2": "Z1-C5", "mat": "WI1" }, { "p1": "Z1-C5", "p2": "Z1-D5", "mat": "WI1" },
+    { "p1": "Z1-D5", "p2": "Z1-D7", "mat": "WI1" }, { "p1": "Z1-D7", "p2": "Z1-F7", "mat": "WI1" },
+    { "p1": "Z1-F7", "p2": "Z1-F5", "mat": "WI1" }, { "p1": "Z1-F5", "p2": "Z1-G5", "mat": "WI1" },
+    { "p1": "Z1-G5", "p2": "Z1-G3", "mat": "WI1" }, { "p1": "Z1-G3", "p2": "Z1-F3", "mat": "WI1" },
+    { "p1": "Z1-F3", "p2": "Z1-F1", "mat": "WI1" }, { "p1": "Z1-F1", "p2": "Z1-D1", "mat": "WI1" },
+    { "p1": "Z1-D1", "p2": "Z1-D3", "mat": "WI1" }, { "p1": "Z1-E3", "p2": "Z1-C3", "mat": "WI1" },
+    { "p1": "Z1-A2", "p2": "Z1-B2", "mat": "WI3" }, { "p1": "Z1-B2", "p2": "Z1-B4", "mat": "WI3" },
+    { "p1": "Z1-B2", "p2": "Z1-A2", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
+    { "p1": "Z1-B4", "p2": "Z1-B6", "mat": "WI3" }, { "p1": "Z1-B6", "p2": "Z1-A6", "mat": "WI3" },
+    { "p1": "Z1-B6", "p2": "Z1-A6", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
+    { "p1": "Z1-C0", "p2": "Z1-C2", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
+    { "p1": "Z1-C2", "p2": "Z1-D2", "mat": "WI3", "offsetP1": {"x": -0.4} },
+    { "p1": "Z1-C6", "p2": "Z1-C8", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
+    { "p1": "Z1-C6", "p2": "Z1-D6", "mat": "WI3", "offsetP1": {"x": -0.4} },
+    { "p1": "Z1-G0", "p2": "Z1-G3", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
+    { "p1": "Z1-G1", "p2": "Z1-F1", "mat": "WI3", "offsetP1": {"x": -0.5} },
+    { "p1": "Z1-G5", "p2": "Z1-G8", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
+    { "p1": "Z1-G7", "p2": "Z1-F7", "mat": "WI3", "offsetP1": {"x": -0.5} },
+    { "p1": "Z1-H1", "p2": "Z1-H1", "mat": "WI3", "offsetP2": {"x": -1.2} },
+    { "p1": "Z1-H1", "p2": "Z1-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
+    { "p1": "Z1-H7", "p2": "Z1-H7", "mat": "WI3", "offsetP2": {"x": -1.2} },
+    { "p1": "Z1-H7", "p2": "Z1-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
+    { "p1": "Z1-I2", "p2": "Z1-H2", "mat": "WI3" }, { "p1": "Z1-H0", "p2": "Z1-H4", "mat": "WI3" },
+    { "p1": "Z1-H4", "p2": "Z1-I4", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
+    { "p1": "Z1-I6", "p2": "Z1-H6", "mat": "WI3" }, { "p1": "Z1-H4", "p2": "Z1-H8", "mat": "WI3" },
+    { "p1": "Z1-H4", "p2": "Z1-I4", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
+
+    { "p1": "Z2-A0", "p2": "Z2-A8", "mat": "WE1" }, { "p1": "Z2-I8", "p2": "Z2-I0", "mat": "WE1" },
+    { "p1": "Z2-A8", "p2": "Z2-I8", "mat": "WE2" }, { "p1": "Z2-I0", "p2": "Z2-A0", "mat": "WE2" },
+    { "p1": "Z2-A4", "p2": "Z2-C4", "mat": "WI2" }, { "p1": "Z2-G4", "p2": "Z2-I4", "mat": "WI2" },
+    { "p1": "Z2-E0", "p2": "Z2-E1", "mat": "WI2" }, { "p1": "Z2-E7", "p2": "Z2-E8", "mat": "WI2" },
+    { "p1": "Z2-C3", "p2": "Z2-C5", "mat": "WI1" }, { "p1": "Z2-C5", "p2": "Z2-D5", "mat": "WI1" },
+    { "p1": "Z2-D5", "p2": "Z2-D7", "mat": "WI1" }, { "p1": "Z2-D7", "p2": "Z2-F7", "mat": "WI1" },
+    { "p1": "Z2-F7", "p2": "Z2-F5", "mat": "WI1" }, { "p1": "Z2-F5", "p2": "Z2-G5", "mat": "WI1" },
+    { "p1": "Z2-G5", "p2": "Z2-G3", "mat": "WI1" }, { "p1": "Z2-G3", "p2": "Z2-F3", "mat": "WI1" },
+    { "p1": "Z2-F3", "p2": "Z2-F1", "mat": "WI1" }, { "p1": "Z2-F1", "p2": "Z2-D1", "mat": "WI1" },
+    { "p1": "Z2-D1", "p2": "Z2-D3", "mat": "WI1" }, { "p1": "Z2-E3", "p2": "Z2-C3", "mat": "WI1" },
+    { "p1": "Z2-A2", "p2": "Z2-B2", "mat": "WI3" }, { "p1": "Z2-B2", "p2": "Z2-B4", "mat": "WI3" },
+    { "p1": "Z2-B2", "p2": "Z2-A2", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
+    { "p1": "Z2-B4", "p2": "Z2-B6", "mat": "WI3" }, { "p1": "Z2-B6", "p2": "Z2-A6", "mat": "WI3" },
+    { "p1": "Z2-B6", "p2": "Z2-A6", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
+    { "p1": "Z2-C0", "p2": "Z2-C2", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
+    { "p1": "Z2-C2", "p2": "Z2-D2", "mat": "WI3", "offsetP1": {"x": -0.4} },
+    { "p1": "Z2-C6", "p2": "Z2-C8", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
+    { "p1": "Z2-C6", "p2": "Z2-D6", "mat": "WI3", "offsetP1": {"x": -0.4} },
+    { "p1": "Z2-G0", "p2": "Z2-G3", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
+    { "p1": "Z2-G1", "p2": "Z2-F1", "mat": "WI3", "offsetP1": {"x": -0.5} },
+    { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
+    { "p1": "Z2-G7", "p2": "Z2-F7", "mat": "WI3", "offsetP1": {"x": -0.5} },
+    { "p1": "Z2-H1", "p2": "Z2-H1", "mat": "WI3", "offsetP2": {"x": -1.2} },
+    { "p1": "Z2-H1", "p2": "Z2-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
+    { "p1": "Z2-H7", "p2": "Z2-H7", "mat": "WI3", "offsetP2": {"x": -1.2} },
+    { "p1": "Z2-H7", "p2": "Z2-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
+    { "p1": "Z2-I2", "p2": "Z2-H2", "mat": "WI3" }, { "p1": "Z2-H0", "p2": "Z2-H4", "mat": "WI3" },
+    { "p1": "Z2-H4", "p2": "Z2-I4", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
+    { "p1": "Z2-I6", "p2": "Z2-H6", "mat": "WI3" }, { "p1": "Z2-H4", "p2": "Z2-H8", "mat": "WI3" },
+    { "p1": "Z2-H4", "p2": "Z2-I4", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
+
+    { "p1": "Z3-A0", "p2": "Z3-A8", "mat": "WE3" }, { "p1": "Z3-A8", "p2": "Z3-I8", "mat": "WE3" },
+    { "p1": "Z3-I8", "p2": "Z3-I0", "mat": "WE3" }, { "p1": "Z3-I0", "p2": "Z3-A0", "mat": "WE3" }
+  ],
+  "openings": [
+    { "gridStart": "Z0-C0", "gridEnd": "Z0-E0", "type": "OD1" },
+
+    { "gridStart": "Z1-C3", "gridEnd": "Z1-D3", "type": "OD2" }, { "gridStart": "Z1-C5", "gridEnd": "Z1-D5", "type": "OD2" },
+    { "gridStart": "Z1-F3", "gridEnd": "Z1-G3", "type": "OD2" }, { "gridStart": "Z1-F5", "gridEnd": "Z1-G5", "type": "OD2" },
+    { "gridStart": "Z1-C2", "gridEnd": "Z1-D2", "type": "OD3" }, { "gridStart": "Z1-C6", "gridEnd": "Z1-D6", "type": "OD3" },
+    { "gridStart": "Z1-B2", "gridEnd": "Z1-B4", "type": "OD3" }, { "gridStart": "Z1-B4", "gridEnd": "Z1-B6", "type": "OD3" },
+    { "gridStart": "Z1-F1", "gridEnd": "Z1-G1", "type": "OD3" }, { "gridStart": "Z1-F7", "gridEnd": "Z1-G7", "type": "OD3" },
+    { "gridStart": "Z1-H1", "gridEnd": "Z1-H2", "type": "OD3" }, { "gridStart": "Z1-H6", "gridEnd": "Z1-H7", "type": "OD3" },
+    { "gridStart": "Z1-H2", "gridEnd": "Z1-H4", "type": "OD3" }, { "gridStart": "Z1-H4", "gridEnd": "Z1-H6", "type": "OD3" },
+    { "gridStart": "Z1-C0", "gridEnd": "Z1-E0", "type": "OW1" }, { "gridStart": "Z1-E0", "gridEnd": "Z1-G0", "type": "OW1" },
+    { "gridStart": "Z1-C8", "gridEnd": "Z1-E8", "type": "OW1" }, { "gridStart": "Z1-E8", "gridEnd": "Z1-G8", "type": "OW1" },
+    { "gridStart": "Z1-A0", "gridEnd": "Z1-C0", "type": "OW2" }, { "gridStart": "Z1-G0", "gridEnd": "Z1-H0", "type": "OW2" },
+    { "gridStart": "Z1-A8", "gridEnd": "Z1-C8", "type": "OW2" }, { "gridStart": "Z1-G8", "gridEnd": "Z1-H8", "type": "OW2" },
+    { "gridStart": "Z1-H0", "gridEnd": "Z1-I0", "type": "OW1" }, { "gridStart": "Z1-H8", "gridEnd": "Z1-I8", "type": "OW1" },
+
+    { "gridStart": "Z2-C3", "gridEnd": "Z2-D3", "type": "OD2" }, { "gridStart": "Z2-C5", "gridEnd": "Z2-D5", "type": "OD2" },
+    { "gridStart": "Z2-F3", "gridEnd": "Z2-G3", "type": "OD2" }, { "gridStart": "Z2-F5", "gridEnd": "Z2-G5", "type": "OD2" },
+    { "gridStart": "Z2-C2", "gridEnd": "Z2-D2", "type": "OD3" }, { "gridStart": "Z2-C6", "gridEnd": "Z2-D6", "type": "OD3" },
+    { "gridStart": "Z2-B2", "gridEnd": "Z2-B4", "type": "OD3" }, { "gridStart": "Z2-B4", "gridEnd": "Z2-B6", "type": "OD3" },
+    { "gridStart": "Z2-F1", "gridEnd": "Z2-G1", "type": "OD3" }, { "gridStart": "Z2-F7", "gridEnd": "Z2-G7", "type": "OD3" },
+    { "gridStart": "Z2-H1", "gridEnd": "Z2-H2", "type": "OD3" }, { "gridStart": "Z2-H6", "gridEnd": "Z2-H7", "type": "OD3" },
+    { "gridStart": "Z2-H2", "gridEnd": "Z2-H4", "type": "OD3" }, { "gridStart": "Z2-H4", "gridEnd": "Z2-H6", "type": "OD3" },
+    { "gridStart": "Z2-C0", "gridEnd": "Z2-E0", "type": "OW1" }, { "gridStart": "Z2-E0", "gridEnd": "Z2-G0", "type": "OW1" },
+    { "gridStart": "Z2-C8", "gridEnd": "Z2-E8", "type": "OW1" }, { "gridStart": "Z2-E8", "gridEnd": "Z2-G8", "type": "OW1" },
+    { "gridStart": "Z2-A0", "gridEnd": "Z2-C0", "type": "OW2" }, { "gridStart": "Z2-G0", "gridEnd": "Z2-H0", "type": "OW2" },
+    { "gridStart": "Z2-A8", "gridEnd": "Z2-C8", "type": "OW2" }, { "gridStart": "Z2-G8", "gridEnd": "Z2-H8", "type": "OW2" },
+    { "gridStart": "Z2-H0", "gridEnd": "Z2-I0", "type": "OW1" }, { "gridStart": "Z2-H8", "gridEnd": "Z2-I8", "type": "OW1" }
+  ],
+  "facades": [
+    { "gridStart": "A0", "gridEnd": "A8", "mat": "CW2", "offsetX": -0.255 },
+    { "gridStart": "A8", "gridEnd": "I8", "mat": "CW1", "offsetZ": 0.255 },
+    { "gridStart": "I8", "gridEnd": "I0", "mat": "CW2", "offsetX": 0.255 },
+    { "gridStart": "I0", "gridEnd": "A0", "mat": "CW1", "offsetZ": -0.255 }
+  ]
 }
 ```
 

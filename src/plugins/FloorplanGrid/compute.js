@@ -39,7 +39,7 @@ export function compute(inputs) {
         }
     });
 
-    const generatedSlabs = blueprint.slabs.map(slabDef => {
+    const generatedSlabs = (blueprint.slabs || []).map(slabDef => {
         const p1 = pointMap[slabDef.p1];
         const p2 = pointMap[slabDef.p2];
         const mat = blueprint.materialTypes[slabDef.mat];
@@ -56,7 +56,7 @@ export function compute(inputs) {
         return { width: Math.abs(p2.x - p1.x), depth: Math.abs(p2.z - p1.z), height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color, level: storeyIdx, typeId: slabDef.mat };
     }).filter(Boolean);
 
-    const rawWalls = blueprint.walls.map((wallDef, index) => {
+    const rawWalls = (blueprint.walls || []).map((wallDef, index) => {
         const p1 = pointMap[wallDef.p1];
         const p2 = pointMap[wallDef.p2];
         const mat = blueprint.materialTypes[wallDef.mat];
@@ -138,12 +138,10 @@ export function compute(inputs) {
         }
 
         const finalLen = wall.length + p1Ext + p2Ext;
-        
         const newP1X = wall.p1X - (wall.dirX * p1Ext);
         const newP1Z = wall.p1Z - (wall.dirZ * p1Ext);
         const newP2X = wall.p2X + (wall.dirX * p2Ext);
         const newP2Z = wall.p2Z + (wall.dirZ * p2Ext);
-        
         const topLvl = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
 
         return { 
@@ -154,57 +152,8 @@ export function compute(inputs) {
         };
     });
 
-    // 🪄 MULTI-STORY FACADE CORNER WRAPPING LOGIC
-    const generatedFacades = (blueprint.facades || []).map((facadeDef, index) => {
-        const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
-        const p2 = pointMap[`Z0-${facadeDef.gridEnd}`];
-        const mat = blueprint.materialTypes[facadeDef.mat];
-        if (!p1 || !p2) return null;
-
-        const p1X = p1.x + (facadeDef.offsetX || 0);
-        const p1Z = p1.z + (facadeDef.offsetZ || 0); 
-        const p2X = p2.x + (facadeDef.offsetX || 0);
-        const p2Z = p2.z + (facadeDef.offsetZ || 0);
-
-        // Vector Direction of the Facade
-        const rawDx = p2X - p1X;
-        const rawDz = p2Z - p1Z;
-        const rawLen = Math.hypot(rawDx, rawDz); 
-        const dirX = rawDx / rawLen;
-        const dirZ = rawDz / rawLen;
-
-        // 🪄 EXTENSION FIX: Push the points outwards by the offset amount so the corners meet perfectly!
-        const ext = Math.abs(facadeDef.offsetX || facadeDef.offsetZ || 0);
-        
-        const finalP1X = p1X - (dirX * ext);
-        const finalP1Z = p1Z - (dirZ * ext);
-        const finalP2X = p2X + (dirX * ext);
-        const finalP2Z = p2Z + (dirZ * ext);
-
-        const finalDx = finalP2X - finalP1X;
-        const finalDz = finalP2Z - finalP1Z;
-        const finalLength = Math.hypot(finalDx, finalDz);
-
-        const baseLevel = 0;
-        const topLevel = zLevels[3] + 0.8; 
-        const height = topLevel - baseLevel;
-        
-        const midX = (finalP1X + finalP2X) / 2;
-        const midZ = (finalP1Z + finalP2Z) / 2;
-        const midY = height / 2;
-
-        uniqueTypes.add(facadeDef.mat);
-        typeColors[facadeDef.mat] = mat.color;
-
-        return { 
-            id: `CW-${index}`, length: finalLength, height, thickness: mat.thickness, 
-            x: midX, y: midY, z: midZ, 
-            rotationY: -Math.atan2(finalDz, finalDx), dirX, dirZ, 
-            color: mat.color, opacity: mat.opacity || 1, level: 0, typeId: facadeDef.mat, baseLevel: 0
-        };
-    }).filter(Boolean);
-
-    const generatedOpenings = blueprint.openings.map((openingDef, index) => {
+    // 🪄 STEP 1: GENERATE WINDOWS FIRST!
+    const generatedOpenings = (blueprint.openings || []).map((openingDef, index) => {
         const p1 = pointMap[openingDef.gridStart];
         const p2 = pointMap[openingDef.gridEnd];
         const opType = blueprint.openingTypes[openingDef.type];
@@ -221,11 +170,10 @@ export function compute(inputs) {
             if (w.level !== storeyIdx) return false;
             const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
             const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
-            return Math.abs((d1 + d2) - w.length) < 0.05; 
+            return Math.abs((d1 + d2) - w.length) < 0.5; // Very safe tolerance
         });
 
         const hostWall = hostRawWall ? generatedWalls.find(w => w.id === hostRawWall.id) : null;
-
         let rotationY = 0, tangentX = 0, tangentZ = 0, thickness = 0.2, baseLevel = p1.y;
 
         if (hostWall) {
@@ -247,8 +195,122 @@ export function compute(inputs) {
         };
     }).filter(Boolean);
 
+    // 🪄 STEP 2: GENERATE FACADES (Using the openings to map gaps!)
+    const generatedFacades = [];
+    (blueprint.facades || []).forEach((facadeDef, fIndex) => {
+        const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
+        const p2 = pointMap[`Z0-${facadeDef.gridEnd}`];
+        const mat = blueprint.materialTypes[facadeDef.mat];
+        if (!p1 || !p2) return;
+
+        const p1X = p1.x + (facadeDef.offsetX || 0);
+        const p1Z = p1.z + (facadeDef.offsetZ || 0); 
+        const p2X = p2.x + (facadeDef.offsetX || 0);
+        const p2Z = p2.z + (facadeDef.offsetZ || 0);
+
+        const rawDx = p2X - p1X;
+        const rawDz = p2Z - p1Z;
+        const rawLen = Math.hypot(rawDx, rawDz); 
+        const dirX = rawDx / rawLen;
+        const dirZ = rawDz / rawLen;
+
+        const ext = Math.abs(facadeDef.offsetX || facadeDef.offsetZ || 0);
+        const finalP1X = p1X - (dirX * ext);
+        const finalP1Z = p1Z - (dirZ * ext);
+        const finalP2X = p2X + (dirX * ext);
+        const finalP2Z = p2Z + (dirZ * ext);
+
+        const finalDx = finalP2X - finalP1X;
+        const finalDz = finalP2Z - finalP1Z;
+        const finalLength = Math.hypot(finalDx, finalDz);
+        const rotationY = -Math.atan2(finalDz, finalDx);
+
+        uniqueTypes.add(facadeDef.mat);
+        typeColors[facadeDef.mat] = mat.color;
+
+        const gap = 0.02; 
+        const generatePanels = (bandName, dStart, dEnd, yStart, yEnd, panelW, color, opacity, lvl) => {
+            let d = dStart;
+            let pIndex = 0;
+            const h = yEnd - yStart;
+            if (h <= 0 || dEnd - dStart <= 0) return; 
+            const midY = yStart + h / 2;
+            
+            while (d < dEnd - 0.001) { 
+                const w = Math.min(panelW, dEnd - d);
+                const cx = finalP1X + dirX * (d + w / 2);
+                const cz = finalP1Z + dirZ * (d + w / 2);
+                
+                generatedFacades.push({
+                    id: `CW-${fIndex}-${bandName}-${pIndex}-${Math.round(d*10)}`,
+                    length: w, height: h, thickness: mat.thickness,
+                    x: cx, y: midY, z: cz,
+                    rotationY, dirX, dirZ, color, opacity, level: lvl, typeId: facadeDef.mat, baseLevel: 0
+                });
+                d += w + gap;
+                pIndex++;
+            }
+        };
+
+        if (facadeDef.mat === 'CW2') {
+            const topLevel = zLevels[3] + 0.8;
+            generatedFacades.push({ 
+                id: `CW2-${fIndex}`, length: finalLength, height: topLevel, thickness: mat.thickness, 
+                x: (finalP1X + finalP2X) / 2, y: topLevel / 2, z: (finalP1Z + finalP2Z) / 2, 
+                rotationY, dirX, dirZ, color: mat.color, opacity: 1, level: 0, typeId: facadeDef.mat 
+            });
+            return;
+        }
+
+        if (facadeDef.mat === 'CW1') {
+            generatePanels('L0-Glass', 0, finalLength, 0, 2.4, 2.4, '#e0f7fa', 0.3, 0);
+            generatePanels('L0-Span', 0, finalLength, 2.4, zLevels[1], 2.4, mat.color, 1, 0);
+
+            [1, 2].forEach(lvl => {
+                const floorBase = zLevels[lvl];
+                const windowTop = floorBase + 2.4; 
+                
+                // 🪄 FIX 2: Level 2 Spandrel merges completely with the Parapet!
+                const nextFloorBase = (lvl === 2) ? (zLevels[3] + 0.8) : zLevels[lvl+1]; 
+
+                // 🪄 FIX 1: Filter windows dynamically and calculate negative space array gaps!
+                const floorOpenings = generatedOpenings.filter(op => {
+                    if (op.level !== lvl) return false;
+                    
+                    // Check if opening sits on this un-offset facade line (0.5m tolerance is perfectly safe)
+                    const opD1 = Math.hypot(op.x - p1.x, op.z - p1.z);
+                    const opD2 = Math.hypot(op.x - p2.x, op.z - p2.z);
+                    if (Math.abs((opD1 + opD2) - rawLen) > 0.5) return false;
+                    
+                    op.facadeD1 = opD1 + ext; 
+                    return true;
+                }).map(op => ({
+                    start: Math.max(0, op.facadeD1 - (op.width / 2)),
+                    end: Math.min(finalLength, op.facadeD1 + (op.width / 2))
+                })).sort((a, b) => a.start - b.start);
+
+                // Array count = window count + 1!
+                let currentD = 0;
+                floorOpenings.forEach(op => {
+                    if (op.start > currentD) {
+                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                    }
+                    currentD = Math.max(currentD, op.end);
+                });
+                
+                // Fill the final gap to the edge of the facade
+                if (currentD < finalLength) {
+                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                }
+
+                // Continuous horizontal spandrel above the windows
+                generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, 2.4, mat.color, 1, lvl);
+            });
+        }
+    });
+
     return {
-        description: `Constructable BIM with Solid Facade`,
+        description: `Constructable BIM with Arrayed Panel Facades`,
         renderType: 'floorplan-grid', 
         dimensions: { widthX, depthY },
         meta: { levels: Array.from(uniqueLevels).sort(), types: Array.from(uniqueTypes).sort(), colors: typeColors },
