@@ -1,9 +1,16 @@
 import blueprint from './blueprint.json';
 
 export function compute(inputs) {
-    const { widthX, depthY, h00, h01, h02 } = inputs;
+    const { widthX, depthY, storeyCount, hGround, hTypical, hParapet, hWindow, wPilaster } = inputs;
     
-    const zLevels = [ 0, h00, h00 + h01, h00 + h01 + h02 ];
+    // 🪄 DYNAMIC Z-LEVEL GENERATOR
+    const zLevels = [0, hGround];
+    let currentZ = hGround;
+    for (let i = 0; i < storeyCount; i++) {
+        currentZ += hTypical;
+        zLevels.push(currentZ); 
+    }
+    const roofLevelIndex = storeyCount + 1;
     
     const halfX = widthX / 2;
     const E = halfX - 1.35;
@@ -39,7 +46,45 @@ export function compute(inputs) {
         }
     });
 
-    const generatedSlabs = (blueprint.slabs || []).map(slabDef => {
+    // 🪄 TEMPLATE CLONING ENGINE
+    const expandBlueprint = (arr) => {
+        const expanded = [];
+        (arr || []).forEach(item => {
+            const ref = item.p1 || item.gridStart;
+            if (!ref) { expanded.push(item); return; } // Pass through Facades
+            
+            if (ref.startsWith('Z0-')) {
+                expanded.push(item);
+            } else if (ref.startsWith('ZR-')) {
+                const newLvl = `Z${roofLevelIndex}-`;
+                expanded.push({
+                    ...item,
+                    p1: item.p1 ? item.p1.replace('ZR-', newLvl) : undefined,
+                    p2: item.p2 ? item.p2.replace('ZR-', newLvl) : undefined,
+                    gridStart: item.gridStart ? item.gridStart.replace('ZR-', newLvl) : undefined,
+                    gridEnd: item.gridEnd ? item.gridEnd.replace('ZR-', newLvl) : undefined
+                });
+            } else if (ref.startsWith('Z1-')) {
+                for (let lvl = 1; lvl <= storeyCount; lvl++) {
+                    const newLvl = `Z${lvl}-`;
+                    expanded.push({
+                        ...item,
+                        p1: item.p1 ? item.p1.replace('Z1-', newLvl) : undefined,
+                        p2: item.p2 ? item.p2.replace('Z1-', newLvl) : undefined,
+                        gridStart: item.gridStart ? item.gridStart.replace('Z1-', newLvl) : undefined,
+                        gridEnd: item.gridEnd ? item.gridEnd.replace('Z1-', newLvl) : undefined
+                    });
+                }
+            }
+        });
+        return expanded;
+    };
+
+    const expandedSlabs = expandBlueprint(blueprint.slabs);
+    const expandedWalls = expandBlueprint(blueprint.walls);
+    const expandedOpenings = expandBlueprint(blueprint.openings);
+
+    const generatedSlabs = expandedSlabs.map(slabDef => {
         const p1 = pointMap[slabDef.p1];
         const p2 = pointMap[slabDef.p2];
         const mat = blueprint.materialTypes[slabDef.mat];
@@ -56,7 +101,7 @@ export function compute(inputs) {
         return { width: Math.abs(p2.x - p1.x), depth: Math.abs(p2.z - p1.z), height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color, level: storeyIdx, typeId: slabDef.mat };
     }).filter(Boolean);
 
-    const rawWalls = (blueprint.walls || []).map((wallDef, index) => {
+    const rawWalls = expandedWalls.map((wallDef, index) => {
         const p1 = pointMap[wallDef.p1];
         const p2 = pointMap[wallDef.p2];
         const mat = blueprint.materialTypes[wallDef.mat];
@@ -69,13 +114,12 @@ export function compute(inputs) {
         const p2X = p2.x + (wallDef.offsetP2?.x || 0);
         const p2Z = p2.z + (wallDef.offsetP2?.z || 0);
 
-        const currentFloorHeight = mat.fixedHeight !== undefined 
-            ? mat.fixedHeight 
-            : (zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : 3.0 - 0.42); 
+        let currentFloorHeight = zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : hParapet; 
+        if (mat.type === 'parapet') currentFloorHeight = hParapet; // Link to slider!
 
         const dx = p2X - p1X;
         const dz = p2Z - p1Z;
-        const length = Math.sqrt((dx * dx) + (dz * dz)); 
+        const length = Math.hypot(dx, dz); 
         const dirX = dx / length;
         const dirZ = dz / length;
 
@@ -152,11 +196,14 @@ export function compute(inputs) {
         };
     });
 
-    // 🪄 STEP 1: GENERATE WINDOWS FIRST!
-    const generatedOpenings = (blueprint.openings || []).map((openingDef, index) => {
+    const generatedOpenings = expandedOpenings.map((openingDef, index) => {
         const p1 = pointMap[openingDef.gridStart];
         const p2 = pointMap[openingDef.gridEnd];
-        const opType = blueprint.openingTypes[openingDef.type];
+        
+        // 🪄 LINKING WINDOW HEIGHT SLIDER
+        const opType = { ...blueprint.openingTypes[openingDef.type] };
+        if (openingDef.type.startsWith('OW')) opType.height = hWindow; 
+        
         if (!p1 || !p2 || !opType) return null;
 
         const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
@@ -170,7 +217,7 @@ export function compute(inputs) {
             if (w.level !== storeyIdx) return false;
             const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
             const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
-            return Math.abs((d1 + d2) - w.length) < 0.5; // Very safe tolerance
+            return Math.abs((d1 + d2) - w.length) < 0.5; 
         });
 
         const hostWall = hostRawWall ? generatedWalls.find(w => w.id === hostRawWall.id) : null;
@@ -195,7 +242,7 @@ export function compute(inputs) {
         };
     }).filter(Boolean);
 
-    // 🪄 STEP 2: GENERATE FACADES (Using the openings to map gaps!)
+    // 🪄 SMART PROCEDURAL FACADE ARRAYS
     const generatedFacades = [];
     (blueprint.facades || []).forEach((facadeDef, fIndex) => {
         const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
@@ -253,7 +300,7 @@ export function compute(inputs) {
         };
 
         if (facadeDef.mat === 'CW2') {
-            const topLevel = zLevels[3] + 0.8;
+            const topLevel = zLevels[roofLevelIndex] + hParapet;
             generatedFacades.push({ 
                 id: `CW2-${fIndex}`, length: finalLength, height: topLevel, thickness: mat.thickness, 
                 x: (finalP1X + finalP2X) / 2, y: topLevel / 2, z: (finalP1Z + finalP2Z) / 2, 
@@ -263,25 +310,26 @@ export function compute(inputs) {
         }
 
         if (facadeDef.mat === 'CW1') {
-            generatePanels('L0-Glass', 0, finalLength, 0, 2.4, 2.4, '#e0f7fa', 0.3, 0);
-            generatePanels('L0-Span', 0, finalLength, 2.4, zLevels[1], 2.4, mat.color, 1, 0);
+            
+            // 🪄 EXACT ARCHITECTURAL SPANDREL MATH
+            const hSpandrel = hTypical - hWindow;
+            const groundGlassHeight = hGround - hSpandrel;
 
-            [1, 2].forEach(lvl => {
+            // Level 0: Ground Floor
+            generatePanels('L0-Glass', 0, finalLength, 0, groundGlassHeight, 2.4, '#e0f7fa', 0.3, 0);
+            generatePanels('L0-Span', 0, finalLength, groundGlassHeight, zLevels[1], 2.4, mat.color, 1, 0);
+
+            // Level 1 to StoreyCount: Typical Floors
+            for (let lvl = 1; lvl <= storeyCount; lvl++) {
                 const floorBase = zLevels[lvl];
-                const windowTop = floorBase + 2.4; 
-                
-                // 🪄 FIX 2: Level 2 Spandrel merges completely with the Parapet!
-                const nextFloorBase = (lvl === 2) ? (zLevels[3] + 0.8) : zLevels[lvl+1]; 
+                const windowTop = floorBase + hWindow; 
+                const nextFloorBase = zLevels[lvl+1]; 
 
-                // 🪄 FIX 1: Filter windows dynamically and calculate negative space array gaps!
                 const floorOpenings = generatedOpenings.filter(op => {
                     if (op.level !== lvl) return false;
-                    
-                    // Check if opening sits on this un-offset facade line (0.5m tolerance is perfectly safe)
                     const opD1 = Math.hypot(op.x - p1.x, op.z - p1.z);
                     const opD2 = Math.hypot(op.x - p2.x, op.z - p2.z);
                     if (Math.abs((opD1 + opD2) - rawLen) > 0.5) return false;
-                    
                     op.facadeD1 = opD1 + ext; 
                     return true;
                 }).map(op => ({
@@ -289,28 +337,29 @@ export function compute(inputs) {
                     end: Math.min(finalLength, op.facadeD1 + (op.width / 2))
                 })).sort((a, b) => a.start - b.start);
 
-                // Array count = window count + 1!
                 let currentD = 0;
                 floorOpenings.forEach(op => {
                     if (op.start > currentD) {
-                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                        // Pilasters link to wPilaster slider!
+                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
                     }
                     currentD = Math.max(currentD, op.end);
                 });
-                
-                // Fill the final gap to the edge of the facade
                 if (currentD < finalLength) {
-                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
                 }
 
-                // Continuous horizontal spandrel above the windows
                 generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, 2.4, mat.color, 1, lvl);
-            });
+            }
+
+            // Level Roof: Parapet Band
+            const roofBase = zLevels[roofLevelIndex];
+            generatePanels('LR-Parapet', 0, finalLength, roofBase, roofBase + hParapet, 2.4, mat.color, 1, roofLevelIndex);
         }
     });
 
     return {
-        description: `Constructable BIM with Arrayed Panel Facades`,
+        description: `Parametric ${storeyCount + 2}-Storey Highrise Engine`,
         renderType: 'floorplan-grid', 
         dimensions: { widthX, depthY },
         meta: { levels: Array.from(uniqueLevels).sort(), types: Array.from(uniqueTypes).sort(), colors: typeColors },

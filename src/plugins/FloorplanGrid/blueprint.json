@@ -2,7 +2,7 @@
   "materialTypes": {
     "WE1": { "priority": 1, "thickness": 0.46, "color": "#d32f2f", "type": "exterior" },
     "WE2": { "priority": 2, "thickness": 0.42, "color": "#f57c00", "type": "exterior" },
-    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0, "fixedHeight": 0.5 },
+    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0 },
     "WI1": { "priority": 3, "thickness": 0.40, "color": "#9e9e9e", "type": "concrete_core" },
     "WI2": { "priority": 4, "thickness": 0.42, "color": "#795548", "type": "timber_loadbearing" },
     "WI3": { "priority": 5, "thickness": 0.10, "color": "#eeeeee", "type": "drywall" },
@@ -22,7 +22,6 @@
   },
   "slabs": [
     { "p1": "Z0-A0", "p2": "Z0-I8", "mat": "SF1" },
-    
     { "p1": "Z1-A0", "p2": "Z1-C8", "mat": "SL1" }, { "p1": "Z1-C0", "p2": "Z1-D3", "mat": "SL1" },
     { "p1": "Z1-C5", "p2": "Z1-D8", "mat": "SL1" }, { "p1": "Z1-D0", "p2": "Z1-F1", "mat": "SL1" },
     { "p1": "Z1-D7", "p2": "Z1-F8", "mat": "SL1" }, { "p1": "Z1-F0", "p2": "Z1-G3", "mat": "SL1" },
@@ -30,16 +29,7 @@
     { "p1": "Z1-C3", "p2": "Z1-G5", "mat": "WI1" },
     { "p1": "Z1-D5", "p2": "Z1-D6", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F7", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F5", "mat": "ST1" },
     { "p1": "Z1-F2", "p2": "Z1-G8", "mat": "SL1" }, 
-
-    { "p1": "Z2-A0", "p2": "Z2-C8", "mat": "SL1" }, { "p1": "Z2-C0", "p2": "Z2-D3", "mat": "SL1" },
-    { "p1": "Z2-C5", "p2": "Z2-D8", "mat": "SL1" }, { "p1": "Z2-D0", "p2": "Z2-F1", "mat": "SL1" },
-    { "p1": "Z2-D7", "p2": "Z2-F8", "mat": "SL1" }, { "p1": "Z2-F0", "p2": "Z2-G3", "mat": "SL1" },
-    { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "SL1" }, { "p1": "Z2-G0", "p2": "Z2-I8", "mat": "SL1" },
-    { "p1": "Z2-C3", "p2": "Z2-G5", "mat": "WI1" },
-    { "p1": "Z2-D5", "p2": "Z2-D6", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F7", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F5", "mat": "ST1" },
-    { "p1": "Z2-F2", "p2": "Z2-G8", "mat": "SL1" }, 
-
-    { "p1": "Z3-A0", "p2": "Z3-I8", "mat": "SR1" }
+    { "p1": "ZR-A0", "p2": "ZR-I8", "mat": "SR1" }
   ],
   "walls": [
     { "p1": "Z0-A0", "p2": "Z0-A8", "mat": "WE1" }, { "p1": "Z0-I8", "p2": "Z0-I0", "mat": "WE1" },
@@ -84,39 +74,8 @@
     { "p1": "Z1-I6", "p2": "Z1-H6", "mat": "WI3" }, { "p1": "Z1-H4", "p2": "Z1-H8", "mat": "WI3" },
     { "p1": "Z1-H4", "p2": "Z1-I4", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
 
-    { "p1": "Z2-A0", "p2": "Z2-A8", "mat": "WE1" }, { "p1": "Z2-I8", "p2": "Z2-I0", "mat": "WE1" },
-    { "p1": "Z2-A8", "p2": "Z2-I8", "mat": "WE2" }, { "p1": "Z2-I0", "p2": "Z2-A0", "mat": "WE2" },
-    { "p1": "Z2-A4", "p2": "Z2-C4", "mat": "WI2" }, { "p1": "Z2-G4", "p2": "Z2-I4", "mat": "WI2" },
-    { "p1": "Z2-E0", "p2": "Z2-E1", "mat": "WI2" }, { "p1": "Z2-E7", "p2": "Z2-E8", "mat": "WI2" },
-    { "p1": "Z2-C3", "p2": "Z2-C5", "mat": "WI1" }, { "p1": "Z2-C5", "p2": "Z2-D5", "mat": "WI1" },
-    { "p1": "Z2-D5", "p2": "Z2-D7", "mat": "WI1" }, { "p1": "Z2-D7", "p2": "Z2-F7", "mat": "WI1" },
-    { "p1": "Z2-F7", "p2": "Z2-F5", "mat": "WI1" }, { "p1": "Z2-F5", "p2": "Z2-G5", "mat": "WI1" },
-    { "p1": "Z2-G5", "p2": "Z2-G3", "mat": "WI1" }, { "p1": "Z2-G3", "p2": "Z2-F3", "mat": "WI1" },
-    { "p1": "Z2-F3", "p2": "Z2-F1", "mat": "WI1" }, { "p1": "Z2-F1", "p2": "Z2-D1", "mat": "WI1" },
-    { "p1": "Z2-D1", "p2": "Z2-D3", "mat": "WI1" }, { "p1": "Z2-E3", "p2": "Z2-C3", "mat": "WI1" },
-    { "p1": "Z2-A2", "p2": "Z2-B2", "mat": "WI3" }, { "p1": "Z2-B2", "p2": "Z2-B4", "mat": "WI3" },
-    { "p1": "Z2-B2", "p2": "Z2-A2", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
-    { "p1": "Z2-B4", "p2": "Z2-B6", "mat": "WI3" }, { "p1": "Z2-B6", "p2": "Z2-A6", "mat": "WI3" },
-    { "p1": "Z2-B6", "p2": "Z2-A6", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
-    { "p1": "Z2-C0", "p2": "Z2-C2", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
-    { "p1": "Z2-C2", "p2": "Z2-D2", "mat": "WI3", "offsetP1": {"x": -0.4} },
-    { "p1": "Z2-C6", "p2": "Z2-C8", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
-    { "p1": "Z2-C6", "p2": "Z2-D6", "mat": "WI3", "offsetP1": {"x": -0.4} },
-    { "p1": "Z2-G0", "p2": "Z2-G3", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
-    { "p1": "Z2-G1", "p2": "Z2-F1", "mat": "WI3", "offsetP1": {"x": -0.5} },
-    { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
-    { "p1": "Z2-G7", "p2": "Z2-F7", "mat": "WI3", "offsetP1": {"x": -0.5} },
-    { "p1": "Z2-H1", "p2": "Z2-H1", "mat": "WI3", "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-H1", "p2": "Z2-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-H7", "p2": "Z2-H7", "mat": "WI3", "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-H7", "p2": "Z2-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-I2", "p2": "Z2-H2", "mat": "WI3" }, { "p1": "Z2-H0", "p2": "Z2-H4", "mat": "WI3" },
-    { "p1": "Z2-H4", "p2": "Z2-I4", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
-    { "p1": "Z2-I6", "p2": "Z2-H6", "mat": "WI3" }, { "p1": "Z2-H4", "p2": "Z2-H8", "mat": "WI3" },
-    { "p1": "Z2-H4", "p2": "Z2-I4", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
-
-    { "p1": "Z3-A0", "p2": "Z3-A8", "mat": "WE3" }, { "p1": "Z3-A8", "p2": "Z3-I8", "mat": "WE3" },
-    { "p1": "Z3-I8", "p2": "Z3-I0", "mat": "WE3" }, { "p1": "Z3-I0", "p2": "Z3-A0", "mat": "WE3" }
+    { "p1": "ZR-A0", "p2": "ZR-A8", "mat": "WE3" }, { "p1": "ZR-A8", "p2": "ZR-I8", "mat": "WE3" },
+    { "p1": "ZR-I8", "p2": "ZR-I0", "mat": "WE3" }, { "p1": "ZR-I0", "p2": "ZR-A0", "mat": "WE3" }
   ],
   "openings": [
     { "gridStart": "Z0-C0", "gridEnd": "Z0-E0", "type": "OD1" },
@@ -132,20 +91,7 @@
     { "gridStart": "Z1-C8", "gridEnd": "Z1-E8", "type": "OW1" }, { "gridStart": "Z1-E8", "gridEnd": "Z1-G8", "type": "OW1" },
     { "gridStart": "Z1-A0", "gridEnd": "Z1-C0", "type": "OW2" }, { "gridStart": "Z1-G0", "gridEnd": "Z1-H0", "type": "OW2" },
     { "gridStart": "Z1-A8", "gridEnd": "Z1-C8", "type": "OW2" }, { "gridStart": "Z1-G8", "gridEnd": "Z1-H8", "type": "OW2" },
-    { "gridStart": "Z1-H0", "gridEnd": "Z1-I0", "type": "OW1" }, { "gridStart": "Z1-H8", "gridEnd": "Z1-I8", "type": "OW1" },
-
-    { "gridStart": "Z2-C3", "gridEnd": "Z2-D3", "type": "OD2" }, { "gridStart": "Z2-C5", "gridEnd": "Z2-D5", "type": "OD2" },
-    { "gridStart": "Z2-F3", "gridEnd": "Z2-G3", "type": "OD2" }, { "gridStart": "Z2-F5", "gridEnd": "Z2-G5", "type": "OD2" },
-    { "gridStart": "Z2-C2", "gridEnd": "Z2-D2", "type": "OD3" }, { "gridStart": "Z2-C6", "gridEnd": "Z2-D6", "type": "OD3" },
-    { "gridStart": "Z2-B2", "gridEnd": "Z2-B4", "type": "OD3" }, { "gridStart": "Z2-B4", "gridEnd": "Z2-B6", "type": "OD3" },
-    { "gridStart": "Z2-F1", "gridEnd": "Z2-G1", "type": "OD3" }, { "gridStart": "Z2-F7", "gridEnd": "Z2-G7", "type": "OD3" },
-    { "gridStart": "Z2-H1", "gridEnd": "Z2-H2", "type": "OD3" }, { "gridStart": "Z2-H6", "gridEnd": "Z2-H7", "type": "OD3" },
-    { "gridStart": "Z2-H2", "gridEnd": "Z2-H4", "type": "OD3" }, { "gridStart": "Z2-H4", "gridEnd": "Z2-H6", "type": "OD3" },
-    { "gridStart": "Z2-C0", "gridEnd": "Z2-E0", "type": "OW1" }, { "gridStart": "Z2-E0", "gridEnd": "Z2-G0", "type": "OW1" },
-    { "gridStart": "Z2-C8", "gridEnd": "Z2-E8", "type": "OW1" }, { "gridStart": "Z2-E8", "gridEnd": "Z2-G8", "type": "OW1" },
-    { "gridStart": "Z2-A0", "gridEnd": "Z2-C0", "type": "OW2" }, { "gridStart": "Z2-G0", "gridEnd": "Z2-H0", "type": "OW2" },
-    { "gridStart": "Z2-A8", "gridEnd": "Z2-C8", "type": "OW2" }, { "gridStart": "Z2-G8", "gridEnd": "Z2-H8", "type": "OW2" },
-    { "gridStart": "Z2-H0", "gridEnd": "Z2-I0", "type": "OW1" }, { "gridStart": "Z2-H8", "gridEnd": "Z2-I8", "type": "OW1" }
+    { "gridStart": "Z1-H0", "gridEnd": "Z1-I0", "type": "OW1" }, { "gridStart": "Z1-H8", "gridEnd": "Z1-I8", "type": "OW1" }
   ],
   "facades": [
     { "gridStart": "A0", "gridEnd": "A8", "mat": "CW2", "offsetX": -0.255 },
