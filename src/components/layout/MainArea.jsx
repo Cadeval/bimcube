@@ -26,15 +26,25 @@ export default function MainArea() {
         return <div style={{ padding: '4rem', color: isDark ? '#fff' : '#000', fontFamily: 'monospace' }}>// Generate layout to view data...</div>;
     }
     const qto = {};
+    
     if (pluginOutputs.slabs) pluginOutputs.slabs.forEach(slab => {
         const type = slab.typeId || 'Unknown Slab';
-        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: true };
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isRoom: false };
         qto[type].count += 1; qto[type].area += (slab.width * slab.depth); qto[type].volume += (slab.width * slab.depth * slab.height);
     });
+    
     if (pluginOutputs.walls) pluginOutputs.walls.forEach(wall => {
         const type = wall.typeId || 'Unknown Wall';
-        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: false };
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isRoom: false };
         qto[type].count += 1; qto[type].length += wall.length; qto[type].area += (wall.length * wall.height); qto[type].volume += (wall.length * wall.height * wall.thickness);
+    });
+
+    if (pluginOutputs.rooms) pluginOutputs.rooms.forEach(room => {
+        const type = room.typeId || 'Unknown Space';
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isRoom: true };
+        qto[type].count += 1; 
+        qto[type].area += room.area; 
+        qto[type].volume += room.volume;
     });
 
     const typeColors = pluginOutputs?.meta?.colors || {};
@@ -54,7 +64,7 @@ export default function MainArea() {
               <tr key={type}>
                 <td style={{ ...cellStyle, textAlign: 'left', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}><span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px' }}></span>{type}</td>
                 <td style={{ ...cellStyle }}>{qto[type].count}</td>
-                <td style={{ ...cellStyle }}>{qto[type].isSlab ? '-' : qto[type].length.toFixed(2)}</td>
+                <td style={{ ...cellStyle }}>{qto[type].isRoom ? '-' : qto[type].length.toFixed(2)}</td>
                 <td style={{ ...cellStyle }}>{qto[type].area.toFixed(2)}</td>
                 <td style={{ ...cellStyle, fontWeight: 'bold' }}>{qto[type].volume.toFixed(2)}</td>
               </tr>
@@ -106,7 +116,6 @@ export default function MainArea() {
       {mainViewMode === 'CSV' && generateQTO()}
       {mainViewMode === 'Map' && <MapArea />} 
       
-      {/* 🪄 WORK IN PROGRESS AR SCREEN */}
       {mainViewMode === 'AR' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: isDark ? '#fff' : '#111', backgroundColor: isDark ? '#1a1a1a' : '#f0f0f0' }}>
             <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>👓</h1>

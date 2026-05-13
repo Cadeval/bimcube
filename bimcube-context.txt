@@ -61,12 +61,14 @@ export default defineConfig({
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "predeploy": "npm run build", 
+    "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-leaflet": "^5.0.0",
     "three": "^0.184.0",
     "zustand": "^5.0.12"
   },
@@ -90,20 +92,46 @@ export default defineConfig({
 ```text
 import { useEffect } from 'react';
 import useStore from './core/store';
+
 import floorplanManifest from './plugins/FloorplanGrid/manifest.json';
+import { compute as floorplanCompute } from './plugins/FloorplanGrid/compute';
 
 import Sidebar from './components/layout/Sidebar';
 import LeftPanel from './components/layout/LeftPanel';
 import MainArea from './components/layout/MainArea';
 
-function App() {
-  const { setActivePlugin, theme } = useStore();
+const toolRegistry = {
+  [floorplanManifest.id]: { manifest: floorplanManifest, compute: floorplanCompute }
+};
 
-  // Initialize default plugin on load
+function App() {
+  const { activePluginId, pluginInputs, setActivePlugin, setPluginOutputs, theme } = useStore();
+
   useEffect(() => {
-    setActivePlugin(floorplanManifest);
+    if (!activePluginId) {
+      setActivePlugin(floorplanManifest);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 🪄 THE ENGINE LOOP (With Error Catching)
+  useEffect(() => {
+    const activeTool = toolRegistry[activePluginId];
+    
+    if (activeTool && pluginInputs && Object.keys(pluginInputs).length > 0) {
+      const firstInputKey = Object.keys(activeTool.manifest.inputs)[0];
+      
+      if (pluginInputs[firstInputKey] !== undefined) {
+         try {
+             // Tell the Chef to cook!
+             const result = activeTool.compute(pluginInputs);
+             setPluginOutputs(result);
+         } catch (error) {
+             console.error("🚨 Math Engine Crashed:", error);
+         }
+      }
+    }
+  }, [activePluginId, pluginInputs, setPluginOutputs]);
 
   return (
     <div style={{ 
@@ -194,17 +222,33 @@ export default function LeftPane() {
 
 **C:\Projects\bimcube\src\components\layout\LeftPanel.jsx**
 ```text
+import { useRef } from 'react'; 
 import useStore from '../../core/store';
 import Slider from '../ui/Slider';
+import ColorInput from '../ui/ColorInput';
+import NumberInput from '../ui/NumberInput';
+import floorplanManifest from '../../plugins/FloorplanGrid/manifest.json';
+
+const PanelLeftCloseIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+    <line x1="9" y1="3" x2="9" y2="21"></line>
+    <path d="M15 15l-3-3 3-3"></path>
+  </svg>
+);
 
 export default function LeftPanel() {
   const { 
-    isLeftPanelOpen, toggleLeftPanel, activeTab, theme, 
+    isLeftPanelOpen, toggleLeftPanel, activeTab, theme, toggleTheme,
     selectedObject, setSelectedObject, pluginInputs, setInputValue,
     visibility, toggleLevel, toggleType, pluginOutputs,
-    clipping, setClipping
+    clipping, setClipping,
+    undo, redo, pastInputs, futureInputs, log, loadSession, 
+    mainViewMode, setMainViewMode // 🪄 ADDED mainViewMode HERE
   } = useStore();
   
+  const fileInputRef = useRef(null); 
+
   const isDark = theme === 'dark';
   const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
   const txtCol = isDark ? '#fff' : '#111';
@@ -219,7 +263,6 @@ export default function LeftPanel() {
     return titles[activeTab] || 'Settings';
   };
 
-  // Helper for button styles in Layers
   const btnStyle = (isVisible) => ({
     display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', 
     color: isVisible ? txtCol : dimCol, cursor: 'pointer', padding: '8px 6px', width: '100%', 
@@ -229,23 +272,64 @@ export default function LeftPanel() {
   const availableLevels = pluginOutputs?.meta?.levels || [];
   const typeColors = pluginOutputs?.meta?.colors || {};
 
+  const exportSession = () => {
+    const data = "--- BIMCUBE SESSION PARAMS ---\n" + JSON.stringify(pluginInputs, null, 2) + "\n\n--- EVENT LOG ---\n" + log.join("\n");
+    const blob = new Blob([data], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `bimcube_session_${new Date().getTime()}.txt`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const jsonString = e.target.result.split('--- BIMCUBE SESSION PARAMS ---')[1].split('--- EVENT LOG ---')[0].trim();
+        loadSession(JSON.parse(jsonString));
+      } catch (err) { alert("Could not load file."); }
+    };
+    reader.readAsText(file);
+    event.target.value = ''; 
+  };
+
   return (
     <div style={{
-      width: '280px', height: '100%', zIndex: 40, display: 'flex', flexDirection: 'column',
-      backgroundColor: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(250, 250, 250, 0.9)',
-      backdropFilter: 'blur(12px)', borderRight: `1px solid ${borderCol}`,
-      boxShadow: '4px 0 24px rgba(0,0,0,0.1)'
+      position: 'absolute',    
+      left: '60px',            
+      top: 0, bottom: 0, 
+      width: '280px', 
+      zIndex: 40, 
+      display: 'flex', flexDirection: 'column',
+      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.65)', 
+      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', 
+      borderRight: `1px solid ${borderCol}`,
+      boxShadow: '4px 0 24px rgba(0,0,0,0.15)'
     }}>
       
-      {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${borderCol}` }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer' }}>◀</button>
-          <button style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'not-allowed' }}>▶</button>
-          <button style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer', marginLeft: '8px' }}>💾</button>
+      <div style={{ 
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+        padding: '12px 16px', height: '56px', boxSizing: 'border-box', 
+        borderBottom: `1px solid ${borderCol}` 
+      }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <button onClick={undo} disabled={pastInputs.length === 0} style={{ background: 'transparent', border: 'none', color: pastInputs.length > 0 ? txtCol : dimCol, cursor: pastInputs.length > 0 ? 'pointer' : 'not-allowed' }}>◀</button>
+          <button onClick={redo} disabled={futureInputs.length === 0} style={{ background: 'transparent', border: 'none', color: futureInputs.length > 0 ? txtCol : dimCol, cursor: futureInputs.length > 0 ? 'pointer' : 'not-allowed' }}>▶</button>
+          
+          <div style={{ width: '1px', height: '16px', backgroundColor: borderCol, margin: '0 4px' }} />
+          
+          <input type="file" accept=".txt" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
+          
+          <button onClick={() => fileInputRef.current?.click()} title="Open Session" style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer' }}>📂</button>
+          <button onClick={exportSession} title="Save Session" style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer' }}>💾</button>
+          <button onClick={toggleTheme} title="Toggle Theme" style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer', fontSize: '1.1rem', marginLeft: '4px' }}>
+             {isDark ? '☀️' : '🌙'}
+          </button>
         </div>
-        <button onClick={toggleLeftPanel} style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer', fontWeight: 'bold' }}>
-          [ {`<`} ]
+
+        <button onClick={toggleLeftPanel} title="Close Panel" style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}>
+          <PanelLeftCloseIcon />
         </button>
       </div>
 
@@ -253,9 +337,7 @@ export default function LeftPanel() {
         {getTitle()}
       </div>
 
-      {/* CONTENT AREA */}
       <div style={{ padding: '0 16px 16px 16px', overflowY: 'auto', flex: 1 }}>
-        
         {selectedObject ? (
           <div>
             <button onClick={() => setSelectedObject(null)} style={{ width: '100%', padding: '8px', marginBottom: '16px', background: isDark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.05)', border: 'none', color: txtCol, cursor: 'pointer', borderRadius: '4px' }}>
@@ -270,14 +352,53 @@ export default function LeftPanel() {
           </div>
         ) : (
           <>
-            {/* 1. INPUTS TAB */}
             {activeTab === 'inputs' && (
-              Object.entries(pluginInputs).map(([key, val]) => (
-                 <Slider key={key} label={key} min={0.1} max={30} step={0.1} value={val} onChange={(v) => setInputValue(key, v)} />
-              ))
+              Object.entries(floorplanManifest.inputs).map(([key, config]) => {
+                const val = pluginInputs[key] ?? config.defaultValue;
+                
+                if (config.type === 'location') {
+                  // 🪄 GENIUS UX: Toggle logic for Map / 3D
+                  const isMapActive = mainViewMode === 'Map';
+                  return (
+                    <div key={key} style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.75rem', color: dimCol, fontWeight: 'bold' }}>{config.label}</span>
+                        <button 
+                          onClick={() => setMainViewMode(isMapActive ? '3D' : 'Map')} 
+                          style={{ 
+                            background: isMapActive ? '#00d1b2' : (isDark ? 'rgba(0,209,178,0.2)' : 'rgba(0,209,178,0.1)'), 
+                            border: `1px solid #00d1b2`, 
+                            color: isMapActive ? '#fff' : '#00d1b2', 
+                            cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '4px', transition: 'all 0.2s' 
+                          }}
+                        >
+                          {isMapActive ? '🧊 3D View' : '📍 Map View'}
+                        </button>
+                      </div>
+                      <input 
+                        type="text" value={val} onChange={(e) => setInputValue(key, e.target.value)} 
+                        style={{ width: '100%', background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '4px', padding: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace' }} 
+                        placeholder="Lat, Lng, Rot" 
+                      />
+                    </div>
+                  );
+                }
+
+                if (config.type === 'color') return <ColorInput key={key} label={config.label} value={val} onChange={(v) => setInputValue(key, v)} />;
+                if (config.type === 'number') return <NumberInput key={key} label={config.label} value={val} onChange={(v) => setInputValue(key, v)} />;
+                if (config.type === 'select') return (
+                    <div key={key} style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: dimCol }}>{config.label}</span>
+                      <select value={val} onChange={(e) => setInputValue(key, e.target.value)} style={{ background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '4px', padding: '4px 6px', fontSize: '0.75rem', outline: 'none' }}>
+                        {config.options.map(opt => <option key={opt} value={opt}>{opt.toUpperCase()}</option>)}
+                      </select>
+                    </div>
+                );
+                return <Slider key={key} label={config.label} min={config.min} max={config.max} step={config.step} value={val} onChange={(v) => setInputValue(key, v)} />;
+              })
             )}
 
-            {/* 2. LAYERS TAB */}
+            {/* ... Rest of LeftPanel (Layers, Section, Log, Export) stays exactly the same ... */}
             {activeTab === 'layers' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>Storeys</h4>
@@ -286,7 +407,6 @@ export default function LeftPanel() {
                     <span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}
                   </button>
                 ))}
-                
                 <h4 style={{ margin: '16px 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>Elements</h4>
                 {Object.keys(visibility.types).sort().map(type => (
                   <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])} onMouseOver={e=>e.currentTarget.style.background=hoverBg} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
@@ -297,14 +417,12 @@ export default function LeftPanel() {
               </div>
             )}
 
-            {/* 3. SECTIONING TAB */}
             {activeTab === 'section' && (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <span style={{ fontSize: '0.85rem', color: txtCol, fontWeight: 'bold' }}>Enable Cut</span>
                   <input type="checkbox" checked={clipping.enabled} onChange={(e) => setClipping({ enabled: e.target.checked })} style={{ cursor: 'pointer', accentColor: '#4af626', width: '18px', height: '18px' }} />
                 </div>
-
                 <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>
                   {['y', 'x', 'z'].map(axis => (
                     <button key={axis} onClick={() => setClipping({ axis })} 
@@ -314,22 +432,40 @@ export default function LeftPanel() {
                     </button>
                   ))}
                 </div>
-
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.8rem', color: dimCol }}>
                   <span>Cut Distance</span><span style={{ color: txtCol, fontWeight: 'bold' }}>{clipping.distance.toFixed(1)}m</span>
                 </div>
-                <input 
-                  type="range" min={clipping.axis === 'y' ? -5 : -25} max={clipping.axis === 'y' ? 15 : 25} step="0.1" value={clipping.distance} 
-                  onChange={(e) => setClipping({ distance: Number(e.target.value) })} 
-                  style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626', height: '4px', opacity: clipping.enabled ? 1 : 0.3 }} disabled={!clipping.enabled}
-                />
+                <input type="range" min={clipping.axis === 'y' ? -5 : -25} max={clipping.axis === 'y' ? 15 : 25} step="0.1" value={clipping.distance} onChange={(e) => setClipping({ distance: Number(e.target.value) })} style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626', height: '4px', opacity: clipping.enabled ? 1 : 0.3 }} disabled={!clipping.enabled} />
               </div>
             )}
-
-            {/* PLACEHOLDERS */}
-            {activeTab === 'view' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>Camera & Render settings...</div>}
-            {activeTab === 'output' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>CSV/Export tools...</div>}
-            {activeTab === 'log' && <div style={{ color: dimCol, fontSize: '0.8rem', fontFamily: 'monospace' }}>&gt; System initialized...</div>}
+            
+            {activeTab === 'view' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>Camera settings...</div>}
+            
+            {activeTab === 'output' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>3D Model Export</h4>
+                <button onClick={() => useStore.getState().triggerExport('gltf')} style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }} onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}>
+                  <span style={{ fontSize: '1.2rem' }}>📦</span> Export GLB (Recommended)
+                </button>
+                <button onClick={() => useStore.getState().triggerExport('obj')} style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }} onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}>
+                  <span style={{ fontSize: '1.2rem' }}>🧊</span> Export OBJ (Raw Geometry)
+                </button>
+                <p style={{ fontSize: '0.75rem', color: dimCol, marginTop: '8px', lineHeight: '1.5' }}><strong>GLB</strong> preserves colors, metallic materials, and glass.<br/><br/><strong>OBJ</strong> exports raw geometry meshes.</p>
+              </div>
+            )}
+            
+            {activeTab === 'log' && (
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <button onClick={exportSession} style={{ width: '100%', padding: '10px', marginBottom: '16px', backgroundColor: '#3366ff', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(51, 102, 255, 0.3)' }}>
+                  📥 Download Session Log
+                </button>
+                <div style={{ flex: 1, color: dimCol, fontSize: '0.75rem', fontFamily: 'monospace', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {log.map((entry, i) => (
+                    <div key={i} style={{ paddingBottom: '4px', borderBottom: `1px solid ${borderCol}` }}>{entry}</div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -342,48 +478,300 @@ export default function LeftPanel() {
 ```text
 import useStore from '../../core/store';
 import Viewport3D from './Viewport3D';
+import MapArea from './MapArea';
 
 export default function MainArea() {
-  const { mainViewMode, setMainViewMode, theme, toggleTheme } = useStore();
+  const { mainViewMode, setMainViewMode, active2DView, setActive2DView, theme, pluginOutputs, setCameraView } = useStore();
   const isDark = theme === 'dark';
+
+  const viewOptions = [];
+  if (pluginOutputs?.meta?.levels) {
+    pluginOutputs.meta.levels.forEach(lvl => viewOptions.push({ id: `Floorplan-${lvl}`, label: `📐 Floorplan L0${lvl}` }));
+  }
+  
+  if (pluginOutputs?.coordinates) {
+    const xGrids = new Set();
+    const zGrids = new Set();
+    pluginOutputs.coordinates.forEach(c => {
+      if (c.name) { xGrids.add(c.name.charAt(0)); zGrids.add(c.name.charAt(1)); }
+    });
+    Array.from(xGrids).sort().forEach(g => viewOptions.push({ id: `Section-X-${g}`, label: `✂️ Section Grid ${g}` }));
+    Array.from(zGrids).sort().forEach(g => viewOptions.push({ id: `Section-Z-${g}`, label: `✂️ Section Grid ${g}` }));
+  }
+
+  const generateQTO = () => {
+    if (!pluginOutputs || pluginOutputs.renderType !== 'floorplan-grid') {
+        return <div style={{ padding: '4rem', color: isDark ? '#fff' : '#000', fontFamily: 'monospace' }}>// Generate layout to view data...</div>;
+    }
+    const qto = {};
+    if (pluginOutputs.slabs) pluginOutputs.slabs.forEach(slab => {
+        const type = slab.typeId || 'Unknown Slab';
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: true };
+        qto[type].count += 1; qto[type].area += (slab.width * slab.depth); qto[type].volume += (slab.width * slab.depth * slab.height);
+    });
+    if (pluginOutputs.walls) pluginOutputs.walls.forEach(wall => {
+        const type = wall.typeId || 'Unknown Wall';
+        if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: false };
+        qto[type].count += 1; qto[type].length += wall.length; qto[type].area += (wall.length * wall.height); qto[type].volume += (wall.length * wall.height * wall.thickness);
+    });
+
+    const typeColors = pluginOutputs?.meta?.colors || {};
+    const borderCol = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.1)';
+    const txtCol = isDark ? '#ffffff' : '#111111';
+    const dimCol = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+    const cellStyle = { padding: '12px', borderBottom: `1px solid ${borderCol}`, textAlign: 'right', color: txtCol };
+    const headerStyle = { ...cellStyle, color: dimCol, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' };
+
+    return (
+      <div style={{ padding: '5rem 2rem 2rem 2rem', color: txtCol, height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+        <h2 style={{ marginBottom: '1.5rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Quantity Takeoff (CSV)</h2>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', backgroundColor: isDark ? 'rgba(24,24,24,0.6)' : 'rgba(255,255,255,0.6)', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <thead><tr><th style={{ ...headerStyle, textAlign: 'left' }}>Element Type</th><th style={{ ...headerStyle }}>Count</th><th style={{ ...headerStyle }}>Total Length (m)</th><th style={{ ...headerStyle }}>Total Area (m²)</th><th style={{ ...headerStyle }}>Total Volume (m³)</th></tr></thead>
+          <tbody>
+            {Object.keys(qto).sort().map(type => (
+              <tr key={type}>
+                <td style={{ ...cellStyle, textAlign: 'left', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}><span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px' }}></span>{type}</td>
+                <td style={{ ...cellStyle }}>{qto[type].count}</td>
+                <td style={{ ...cellStyle }}>{qto[type].isSlab ? '-' : qto[type].length.toFixed(2)}</td>
+                <td style={{ ...cellStyle }}>{qto[type].area.toFixed(2)}</td>
+                <td style={{ ...cellStyle, fontWeight: 'bold' }}>{qto[type].volume.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const selectStyle = {
+    background: isDark ? 'rgba(24,24,24,0.8)' : 'rgba(255,255,255,0.8)',
+    color: isDark ? '#fff' : '#000', border: `1px solid ${isDark ? '#333' : '#ccc'}`,
+    padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', outline: 'none',
+    backdropFilter: 'blur(8px)', fontWeight: 'bold', fontSize: '0.85rem'
+  };
 
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       
-      {/* 🪄 FLOATING TOP RIGHT DROPDOWN */}
-      <div style={{ 
-        position: 'absolute', top: '16px', right: '16px', zIndex: 10,
-        display: 'flex', gap: '8px'
-      }}>
-        <button onClick={toggleTheme} style={{
-          background: isDark ? 'rgba(24,24,24,0.8)' : 'rgba(255,255,255,0.8)', border: `1px solid ${isDark ? '#333' : '#ccc'}`,
-          padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', backdropFilter: 'blur(8px)', color: isDark ? '#fff' : '#000'
-        }}>
-          {isDark ? '☀️' : '🌙'}
-        </button>
+      <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10, display: 'flex', gap: '8px' }}>
+        
+        {mainViewMode === '3D' && (
+           <select onChange={(e) => { setCameraView(e.target.value); e.target.value = 'default'; }} defaultValue="default" style={selectStyle}>
+             <option value="default" disabled hidden>🎥 Set Camera...</option>
+             <option value="top">Top</option><option value="bottom">Bottom</option>
+             <option value="front">Front</option><option value="back">Back</option>
+             <option value="left">Left</option><option value="right">Right</option>
+             <option value="iso">Isometric</option>
+           </select>
+        )}
 
-        <select 
-          value={mainViewMode} 
-          onChange={(e) => setMainViewMode(e.target.value)}
-          style={{
-            background: isDark ? 'rgba(24,24,24,0.8)' : 'rgba(255,255,255,0.8)',
-            color: isDark ? '#fff' : '#000', border: `1px solid ${isDark ? '#333' : '#ccc'}`,
-            padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', outline: 'none',
-            backdropFilter: 'blur(8px)', fontWeight: 'bold', fontSize: '0.85rem'
-          }}
-        >
-          <option value="2D">📐 2D Plan</option>
+        {mainViewMode === '2D' && (
+           <select value={active2DView} onChange={(e) => setActive2DView(e.target.value)} style={{...selectStyle, color: '#00d1b2', borderColor: '#00d1b2'}}>
+              {viewOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+           </select>
+        )}
+
+        <select value={mainViewMode} onChange={(e) => setMainViewMode(e.target.value)} style={selectStyle}>
           <option value="3D">🧊 3D View</option>
+          <option value="2D">📐 2D Plan</option>
+          <option value="Map">🗺️ Map Mode</option> 
+          <option value="AR">👓 AR Mode</option> 
           <option value="CSV">📊 CSV Data</option>
-          <option value="Map">🗺️ Map Mode</option>
-          <option value="Render">📸 Render</option>
         </select>
       </div>
 
-      {/* Main Content Router */}
-      {mainViewMode === '3D' && <Viewport3D />}
-      {mainViewMode === 'CSV' && <div style={{ padding: '4rem', color: isDark?'#fff':'#000' }}>CSV View Placeholder</div>}
-      {mainViewMode === '2D' && <div style={{ padding: '4rem', color: isDark?'#fff':'#000' }}>2D View Placeholder</div>}
+      {(mainViewMode === '3D' || mainViewMode === '2D') && <Viewport3D />}
+      {mainViewMode === 'CSV' && generateQTO()}
+      {mainViewMode === 'Map' && <MapArea />} 
+      
+      {/* 🪄 WORK IN PROGRESS AR SCREEN */}
+      {mainViewMode === 'AR' && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: isDark ? '#fff' : '#111', backgroundColor: isDark ? '#1a1a1a' : '#f0f0f0' }}>
+            <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>👓</h1>
+            <h2 style={{ fontWeight: '900', marginBottom: '0.5rem' }}>WebXR / AR Mode</h2>
+            <p style={{ color: isDark ? '#aaa' : '#666', maxWidth: '400px', textAlign: 'center', lineHeight: '1.6' }}>
+              We are currently optimizing the 1:1 scale building projection for mobile devices and Apple Vision Pro. Check back in the next update!
+            </p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\components\layout\MapArea.jsx**
+```text
+import { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Polygon, useMapEvents, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import useStore from '../../core/store';
+
+const parseCoords = (str) => {
+  if (!str) return [48.225023, 16.330946, 0];
+  const parts = str.split(',').map(n => parseFloat(n.trim()));
+  return [
+      isNaN(parts[0]) ? 48.225023 : parts[0],
+      isNaN(parts[1]) ? 16.330946 : parts[1],
+      isNaN(parts[2]) ? 0 : parts[2],
+  ];
+};
+
+const MapEvents = ({ rotation, setInputValue }) => {
+  useMapEvents({
+    click(e) {
+      setInputValue('siteCoords', `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}, ${rotation}`);
+    },
+  });
+  return null;
+};
+
+const MapController = ({ lat, lng }) => {
+  const map = useMap();
+  useEffect(() => {
+     const currentCenter = map.getCenter();
+     if (map.distance(currentCenter, [lat, lng]) > 50) { 
+         map.flyTo([lat, lng], map.getZoom() < 18 ? 19 : map.getZoom(), { animate: true, duration: 1.5 });
+     }
+  }, [lat, lng, map]);
+  return null;
+};
+
+export default function MapArea() {
+  const { pluginInputs, setInputValue, pluginOutputs, theme } = useStore();
+  const isDark = theme === 'dark';
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const [lat, lng, rotation] = parseCoords(pluginInputs.siteCoords);
+
+  const widthX = pluginOutputs?.dimensions?.widthX || 22;
+  const depthY = pluginOutputs?.dimensions?.depthY || 16;
+
+  const mToLat = 1 / 111111; 
+  const mToLng = 1 / (111111 * Math.cos(lat * (Math.PI / 180)));
+
+  const calculateFootprint = () => {
+    const hw = widthX / 2;
+    const hd = depthY / 2;
+    const rad = rotation * (Math.PI / 180);
+
+    const corners = [
+      { x: -hw, y: -hd },
+      { x: hw, y: -hd },
+      { x: hw, y: hd },
+      { x: -hw, y: hd }
+    ];
+
+    return corners.map(c => {
+      const rotX = c.x * Math.cos(rad) - c.y * Math.sin(rad);
+      const rotY = c.x * Math.sin(rad) + c.y * Math.cos(rad);
+      return [ lat + (rotY * mToLat), lng + (rotX * mToLng) ];
+    });
+  };
+
+  const calculateFrontIndicator = () => {
+    const hd = depthY / 2;
+    const rad = rotation * (Math.PI / 180);
+    
+    const arrowWidth = Math.min(widthX * 0.2, 4); 
+    const arrowHeight = Math.min(depthY * 0.15, 3); 
+
+    const points = [
+      { x: -arrowWidth/2, y: hd }, 
+      { x: arrowWidth/2, y: hd },  
+      { x: 0, y: hd + arrowHeight } 
+    ];
+
+    return points.map(c => {
+      const rotX = c.x * Math.cos(rad) - c.y * Math.sin(rad);
+      const rotY = c.x * Math.sin(rad) + c.y * Math.cos(rad);
+      return [ lat + (rotY * mToLat), lng + (rotX * mToLng) ];
+    });
+  };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if(!searchQuery) return;
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        if(data && data.length > 0) {
+            const newLat = parseFloat(data[0].lat);
+            const newLng = parseFloat(data[0].lon);
+            setInputValue('siteCoords', `${newLat.toFixed(6)}, ${newLng.toFixed(6)}, ${rotation}`);
+            setSearchQuery(''); 
+        } else {
+            alert("Location not found. Try a broader search.");
+        }
+    } catch(err) { console.error(err); }
+  };
+
+  return (
+    <div style={{ width: '100%', height: '100%', position: 'relative', zIndex: 1 }}>
+      
+      {/* 🪄 MOBILE OPTIMIZED SEARCH BAR: Dropped to 75px to clear dropdowns */}
+      <div style={{
+          position: 'absolute', top: '75px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+          backgroundColor: isDark ? 'rgba(24, 24, 24, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(10px)', padding: '6px', borderRadius: '8px',
+          border: `1px solid ${isDark ? '#444' : '#ccc'}`, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          width: 'max-content', maxWidth: '90vw'
+      }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '6px' }}>
+              <input 
+                 type="text" placeholder="Search address..." 
+                 value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                 style={{ padding: '6px 8px', borderRadius: '4px', border: `1px solid ${isDark ? '#444' : '#ccc'}`, background: isDark ? 'rgba(0,0,0,0.5)' : '#fff', color: isDark ? '#fff' : '#000', outline: 'none', width: '160px', fontSize: '0.8rem' }}
+              />
+              <button type="submit" style={{ padding: '6px 10px', borderRadius: '4px', border: 'none', background: '#00d1b2', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem' }}>
+                 🔍
+              </button>
+          </form>
+      </div>
+
+      <MapContainer center={[lat, lng]} zoom={19} maxZoom={20} style={{ width: '100%', height: '100%', background: '#f0f0f0' }} zoomControl={false}>
+        <MapController lat={lat} lng={lng} />
+        <TileLayer maxZoom={20} attribution='&copy; OpenStreetMap' url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' />
+        <MapEvents rotation={rotation} setInputValue={setInputValue} />
+        <Polygon positions={calculateFootprint()} pathOptions={{ color: '#00d1b2', fillColor: '#00d1b2', fillOpacity: 0.5, weight: 2 }} />
+        <Polygon positions={calculateFrontIndicator()} pathOptions={{ color: '#ff3366', fillColor: '#ff3366', fillOpacity: 0.9, weight: 1 }} />
+      </MapContainer>
+
+      {/* 🪄 MOBILE OPTIMIZED CONTROL PANEL: Stacked layout! */}
+      <div style={{
+          position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+          backgroundColor: isDark ? 'rgba(24, 24, 24, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(10px)', padding: '12px 16px', borderRadius: '8px',
+          border: `1px solid ${isDark ? '#444' : '#ccc'}`, color: isDark ? '#fff' : '#000',
+          display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', 
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)', width: 'max-content', maxWidth: '90vw'
+      }}>
+        
+        <div style={{ color: '#00d1b2', fontWeight: '900', fontSize: '0.85rem', textAlign: 'center', marginBottom: '4px' }}>
+          📍 Click on Map to place Building
+        </div>
+
+        <div style={{ display: 'flex', gap: '24px', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', color: isDark ? '#aaa' : '#666', textTransform: 'uppercase' }}>Latitude</span>
+              <strong style={{ fontSize: '0.85rem' }}>{lat.toFixed(6)}</strong>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', color: isDark ? '#aaa' : '#666', textTransform: 'uppercase' }}>Longitude</span>
+              <strong style={{ fontSize: '0.85rem' }}>{lng.toFixed(6)}</strong>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Rotate</span>
+            <input 
+                type="range" min="0" max="360" step="1" 
+                value={rotation} 
+                onChange={(e) => setInputValue('siteCoords', `${lat}, ${lng}, ${e.target.value}`)}
+                style={{ width: '120px', accentColor: '#00d1b2', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '0.75rem', width: '32px', textAlign: 'right' }}>{rotation}°</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -664,7 +1052,7 @@ export default function RightPane() {
 import useStore from '../../core/store';
 
 export default function Sidebar() {
-  const { activeTab, setActiveTab, theme } = useStore();
+  const { activeTab, setActiveTab, theme, isLeftPanelOpen, toggleLeftPanel } = useStore();
   const isDark = theme === 'dark';
 
   const icons = [
@@ -678,18 +1066,43 @@ export default function Sidebar() {
 
   return (
     <div style={{
-      width: '60px', height: '100%', zIndex: 50,
-      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+      width: '60px', height: '100%', zIndex: 50, position: 'relative',
+      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.9)' : 'rgba(255, 255, 255, 0.9)',
       backdropFilter: 'blur(12px)', borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '1rem'
+      display: 'flex', flexDirection: 'column', alignItems: 'center', 
+      paddingTop: '12px' 
     }}>
-      <div style={{ fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem' }}>BC</div>
+      
+      {/* 🪄 GENIUS DETAIL: Logo is now a master toggle button with hover effects! */}
+      <button 
+        onClick={toggleLeftPanel}
+        title={isLeftPanelOpen ? "Close Panel" : "Open Panel"}
+        style={{ 
+          height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontWeight: '900', fontSize: '1.2rem', marginBottom: '16px', letterSpacing: '-1px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: isDark ? '#ffffff' : '#111111', // White in Dark Mode, Black in Light Mode!
+          transition: 'color 0.2s, transform 0.2s'
+        }}
+        onMouseOver={e => e.currentTarget.style.transform = 'scale(1.15)'}
+        onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+      >
+        BC
+      </button>
       
       {icons.map(item => {
-        const isActive = activeTab === item.id;
+        const isActive = activeTab === item.id && isLeftPanelOpen; 
+        
         return (
           <button 
-            key={item.id} title={item.title} onClick={() => setActiveTab(item.id)}
+            key={item.id} title={item.title} 
+            onClick={() => {
+              if (activeTab === item.id && isLeftPanelOpen) {
+                toggleLeftPanel();
+              } else {
+                setActiveTab(item.id);
+              }
+            }}
             style={{
               width: '44px', height: '44px', marginBottom: '8px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '1.2rem', transition: 'all 0.2s',
               backgroundColor: isActive ? (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') : 'transparent',
@@ -711,23 +1124,31 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'; 
+import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'; 
 import useStore from '../../core/store';
 
 export default function Viewport3D() {
   const mountRef = useRef(null);
   
-  const { pluginOutputs, theme, visibility, selectedObject, clipping } = useStore();
+  const { 
+    pluginOutputs, theme, visibility, selectedObject, clipping, 
+    mainViewMode, active2DView, cameraViewTrigger, exportTrigger 
+  } = useStore();
   
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
-  const cameraRef = useRef(null);
   const controlsRef = useRef(null);
   const rendererRef = useRef(null); 
+  
+  const perspCamRef = useRef(null);
+  const orthoCamRef = useRef(null);
+  const cameraRef = useRef(null); 
 
-  const clipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5));
+  const uiClipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5)); 
+  const viewClipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1000)); 
 
-  // Initialize Three.js Scene
   useEffect(() => {
     const currentMount = mountRef.current;
     if (!currentMount) return;
@@ -737,17 +1158,28 @@ export default function Viewport3D() {
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(10, 20, 10);
+    
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(20, 40, 20);
     scene.add(dirLight);
+    
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillLight.position.set(-20, 10, -20);
+    scene.add(fillLight);
 
-    const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
-    camera.position.set(20, 15, 20);
-    cameraRef.current = camera; 
+    const aspect = currentMount.clientWidth / currentMount.clientHeight;
+    
+    perspCamRef.current = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+    perspCamRef.current.position.set(20, 15, 20);
+    
+    const frustum = 15; 
+    orthoCamRef.current = new THREE.OrthographicCamera(-frustum*aspect, frustum*aspect, frustum, -frustum, -100, 1000);
+    
+    cameraRef.current = perspCamRef.current; 
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
-    renderer.localClippingEnabled = clipping.enabled; 
+    renderer.localClippingEnabled = true; 
     rendererRef.current = renderer;
     currentMount.appendChild(renderer.domElement);
 
@@ -759,7 +1191,7 @@ export default function Viewport3D() {
     labelRenderer.domElement.style.pointerEvents = 'none'; 
     currentMount.appendChild(labelRenderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new OrbitControls(cameraRef.current, renderer.domElement);
     controls.enableDamping = true;
     controlsRef.current = controls; 
 
@@ -771,17 +1203,22 @@ export default function Viewport3D() {
     const mouse = new THREE.Vector2();
 
     const onMouseClick = (event) => {
-      if (event.movementX > 2 || event.movementY > 2) return;
+      if (event.movementX > 2 || event.movementY > 2) return; 
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
+      
+      raycaster.setFromCamera(mouse, cameraRef.current);
 
-      const intersects = raycaster.intersectObjects(group.children, true);
-      const selectableIntersects = intersects.filter(i => i.object.userData?.isSelectable);
+      const intersects = raycaster.intersectObjects(group.children, true).filter(i => {
+         if (!i.object.userData?.isSelectable) return false;
+         if (clipping.enabled && uiClipPlaneRef.current.distanceToPoint(i.point) < 0) return false;
+         if (mainViewMode === '2D' && viewClipPlaneRef.current.distanceToPoint(i.point) < 0) return false;
+         return true;
+      });
 
-      if (selectableIntersects.length > 0) {
-        useStore.getState().setSelectedObject(selectableIntersects[0].object.userData);
+      if (intersects.length > 0) {
+        useStore.getState().setSelectedObject(intersects[0].object.userData);
       } else {
         useStore.getState().setSelectedObject(null);
       }
@@ -789,18 +1226,23 @@ export default function Viewport3D() {
 
     renderer.domElement.addEventListener('click', onMouseClick);
 
+    // 🪄 Safe Request Animation Frame Restored!
     let animationFrameId;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       controls.update();
-      renderer.render(scene, camera);
-      labelRenderer.render(scene, camera); 
+      renderer.render(scene, cameraRef.current);
+      labelRenderer.render(scene, cameraRef.current); 
     };
     animate();
 
     const handleResize = () => {
-      camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
-      camera.updateProjectionMatrix();
+      const newAspect = currentMount.clientWidth / currentMount.clientHeight;
+      perspCamRef.current.aspect = newAspect;
+      perspCamRef.current.updateProjectionMatrix();
+      orthoCamRef.current.left = -frustum * newAspect;
+      orthoCamRef.current.right = frustum * newAspect;
+      orthoCamRef.current.updateProjectionMatrix();
       renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
       labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     };
@@ -818,52 +1260,120 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update Clipping Plane
   useEffect(() => {
     if (!rendererRef.current) return;
-    rendererRef.current.localClippingEnabled = clipping.enabled;
-    if (clipping.axis === 'y') clipPlaneRef.current.normal.set(0, -1, 0); 
-    else if (clipping.axis === 'x') clipPlaneRef.current.normal.set(-1, 0, 0); 
-    else if (clipping.axis === 'z') clipPlaneRef.current.normal.set(0, 0, -1); 
-    clipPlaneRef.current.constant = clipping.distance;
+    if (!clipping.enabled) {
+        uiClipPlaneRef.current.constant = 1000; 
+        return;
+    }
+    if (clipping.axis === 'y') uiClipPlaneRef.current.normal.set(0, -1, 0); 
+    else if (clipping.axis === 'x') uiClipPlaneRef.current.normal.set(-1, 0, 0); 
+    else if (clipping.axis === 'z') uiClipPlaneRef.current.normal.set(0, 0, -1); 
+    uiClipPlaneRef.current.constant = clipping.distance;
   }, [clipping]);
 
-  // Update Theme & Background
+  useEffect(() => {
+    if (!controlsRef.current || !groupRef.current) return;
+    const controls = controlsRef.current;
+    
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+
+    if (mainViewMode === '3D') {
+        cameraRef.current = perspCamRef.current;
+        controls.object = perspCamRef.current;
+        controls.enableRotate = true; 
+        controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+        viewClipPlaneRef.current.constant = 1000; 
+
+    } else if (mainViewMode === '2D') {
+        cameraRef.current = orthoCamRef.current;
+        controls.object = orthoCamRef.current;
+        controls.enableRotate = false; 
+        controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+        
+        controls.target.copy(center);
+
+        if (mountRef.current) {
+            const maxSize = Math.max(box.getSize(new THREE.Vector3()).x, box.getSize(new THREE.Vector3()).y, box.getSize(new THREE.Vector3()).z) || 10;
+            const f = maxSize * 0.6;
+            const aspect = mountRef.current.clientWidth / mountRef.current.clientHeight;
+            orthoCamRef.current.left = -f * aspect;
+            orthoCamRef.current.right = f * aspect;
+            orthoCamRef.current.top = f;
+            orthoCamRef.current.bottom = -f;
+        }
+
+        if (active2DView.startsWith('Floorplan')) {
+            const lvl = parseInt(active2DView.split('-')[1]);
+            const pt = pluginOutputs.coordinates?.find(p => p.level === lvl);
+            const cutY = pt ? pt.y + 1.2 : 1.2; 
+            orthoCamRef.current.position.set(center.x, center.y + 50, center.z + 0.1); 
+            viewClipPlaneRef.current.normal.set(0, -1, 0); 
+            viewClipPlaneRef.current.constant = cutY;
+        } else if (active2DView.startsWith('Section-X')) {
+            const gridName = active2DView.split('-')[2];
+            const pt = pluginOutputs.coordinates?.find(p => p.name.startsWith(gridName));
+            const cutX = pt ? pt.x : 0;
+            orthoCamRef.current.position.set(cutX - 50, center.y, center.z); 
+            viewClipPlaneRef.current.normal.set(1, 0, 0); 
+            viewClipPlaneRef.current.constant = -cutX;
+        } else if (active2DView.startsWith('Section-Z')) {
+            const gridName = active2DView.split('-')[2];
+            const pt = pluginOutputs.coordinates?.find(p => p.name.endsWith(gridName));
+            const cutZ = pt ? pt.z : 0;
+            orthoCamRef.current.position.set(center.x, center.y, cutZ + 50); 
+            viewClipPlaneRef.current.normal.set(0, 0, -1); 
+            viewClipPlaneRef.current.constant = cutZ;
+        }
+        orthoCamRef.current.updateProjectionMatrix();
+    }
+  }, [mainViewMode, active2DView, pluginOutputs]);
+
   useEffect(() => {
     if (!sceneRef.current) return;
-    // We make background transparent to let MainArea's background show through!
     sceneRef.current.background = null; 
     if (gridHelperRef.current) sceneRef.current.remove(gridHelperRef.current);
     
-    const mainColor = theme === 'dark' ? '#555555' : '#bbbbbb';
-    const subColor = theme === 'dark' ? '#333333' : '#e0e0e0';
-    const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
-    gridHelperRef.current = gridHelper;
-    sceneRef.current.add(gridHelper);
-  }, [theme]);
+    if (mainViewMode !== '2D') {
+      const mainColor = theme === 'dark' ? '#555555' : '#bbbbbb';
+      const subColor = theme === 'dark' ? '#333333' : '#e0e0e0';
+      const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
+      gridHelperRef.current = gridHelper;
+      sceneRef.current.add(gridHelper);
+    }
+  }, [theme, mainViewMode]);
 
-  // Generate Geometry
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
     group.clear(); 
 
+    const is2D = mainViewMode === '2D'; 
+    const isFloorplan = is2D && active2DView.startsWith('Floorplan');
+    const activeLvl = isFloorplan ? parseInt(active2DView.split('-')[1]) : -1;
+
     if (pluginOutputs.renderType === 'floorplan-grid') {
       const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
-      const clipPlanes = [clipPlaneRef.current];
+      const clipPlanes = [uiClipPlaneRef.current, viewClipPlaneRef.current];
 
       if (pluginOutputs.coordinates) {
         const dotGeom = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2', clippingPlanes: clipPlanes });
         pluginOutputs.coordinates.forEach(pt => {
           if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
+            if (isFloorplan && pt.level > activeLvl) return;
+
             const dot = new THREE.Mesh(dotGeom, dotMat);
             dot.position.set(pt.x, pt.y, pt.z);
             group.add(dot);
-            const div = document.createElement('div');
-            div.className = 'grid-label'; div.textContent = pt.name;
-            const label = new CSS2DObject(div); label.position.set(pt.x, pt.y, pt.z);
-            group.add(label);
+            
+            if (!is2D) { 
+              const div = document.createElement('div');
+              div.className = 'grid-label'; div.textContent = pt.name;
+              const label = new CSS2DObject(div); label.position.set(pt.x, pt.y, pt.z);
+              group.add(label);
+            }
           }
         });
       }
@@ -871,11 +1381,17 @@ export default function Viewport3D() {
       if (pluginOutputs.slabs) {
         pluginOutputs.slabs.forEach((slab, index) => {
           if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
+            if (isFloorplan && slab.level > activeLvl) return; 
+
             const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
-            const mat = new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8, clippingPlanes: clipPlanes });
+            
+            const mat = isFloorplan 
+                ? new THREE.MeshBasicMaterial({ color: theme === 'dark' ? '#222222' : '#f0f0f0', side: THREE.DoubleSide, clippingPlanes: clipPlanes })
+                : new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(slab.x, slab.y, slab.z);
-            mesh.userData = { ...slab, id: `slab-${index}`, isSelectable: true, category: 'Slab' };
+            mesh.userData = { ...slab, id: `slab-${index}`, isSelectable: true, category: 'Slab', baseColorHex: mat.color.getHex() };
             group.add(mesh);
           }
         });
@@ -884,18 +1400,53 @@ export default function Viewport3D() {
       if (pluginOutputs.walls) {
         pluginOutputs.walls.forEach((wall, index) => {
           if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
+            if (isFloorplan && wall.level > activeLvl) return; 
+
             const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
-            const mat = new THREE.MeshStandardMaterial({ 
-              color: wall.color, roughness: wall.opacity < 1 ? 0.1 : 0.8, 
-              transparent: wall.opacity < 1, opacity: wall.opacity || 1, clippingPlanes: clipPlanes 
-            });
+            
+            const isGlassPanel = wall.id.includes('Glass');
+            const isGroundGlass = wall.id.includes('L0-Glass');
+            const isStud = wall.id.includes('GroundStud');
+            
+            let finalRoughness = wall.opacity < 1 ? 0.15 : 0.8;
+            let finalMetalness = wall.opacity < 1 ? 0.85 : 0.1;
+
+            if (isGlassPanel) {
+                finalRoughness = isGroundGlass ? 0.05 : 0.15; 
+                finalMetalness = isGroundGlass ? 0.95 : 0.85; 
+            } else if (isStud) {
+                finalRoughness = 0.3; 
+                finalMetalness = 0.8; 
+            }
+            
+            let mat;
+            if (isFloorplan) {
+               const pochéColor = theme === 'dark' ? '#dddddd' : '#222222';
+               mat = new THREE.MeshBasicMaterial({ 
+                   color: isGlassPanel ? '#8ab4f8' : pochéColor, 
+                   transparent: isGlassPanel, opacity: isGlassPanel ? 0.4 : 1, 
+                   side: THREE.DoubleSide, 
+                   clippingPlanes: clipPlanes 
+               });
+            } else {
+               mat = new THREE.MeshStandardMaterial({ 
+                  color: wall.color, roughness: finalRoughness, metalness: finalMetalness,
+                  transparent: wall.opacity < 1, opacity: wall.opacity || 1, 
+                  side: THREE.DoubleSide, 
+                  clippingPlanes: clipPlanes 
+               });
+            }
+
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(wall.x, wall.y, wall.z);
             mesh.rotation.y = wall.rotationY; 
-            mesh.userData = { ...wall, id: `wall-${index}`, isSelectable: true, category: 'Wall' };
-            const edges = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.15, transparent: true, clippingPlanes: clipPlanes }));
-            mesh.add(line);
+            mesh.userData = { ...wall, id: `wall-${index}`, isSelectable: true, category: isStud ? 'Mullion' : 'Wall', baseColorHex: mat.color.getHex() };
+            
+            if (!isStud) {
+                const edges = new THREE.EdgesGeometry(geom);
+                const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: isFloorplan ? (theme==='dark'?'#222':'#fff') : wireColor, opacity: isFloorplan ? 0.3 : 0.15, transparent: true, clippingPlanes: clipPlanes }));
+                mesh.add(line);
+            }
             group.add(mesh);
           }
         });
@@ -904,52 +1455,78 @@ export default function Viewport3D() {
       if (pluginOutputs.openings) {
         pluginOutputs.openings.forEach((opening, index) => {
           if (visibility.levels[opening.level] && visibility.types[opening.typeId]) {
+            if (isFloorplan && opening.level > activeLvl) return;
+
             const geom = new THREE.BoxGeometry(opening.width, opening.height, opening.depth);
-            const mat = new THREE.MeshStandardMaterial({ 
-              color: opening.color, roughness: opening.opacity < 1 ? 0.1 : 0.8, metalness: opening.opacity < 1 ? 0.8 : 0.1,
-              transparent: opening.opacity < 1, opacity: opening.opacity, clippingPlanes: clipPlanes
-            });
+            const isGlassOp = opening.category === 'Window';
+            
+            const mat = isFloorplan
+                ? new THREE.MeshBasicMaterial({ color: '#8ab4f8', transparent: true, opacity: 0.4, side: THREE.DoubleSide, clippingPlanes: clipPlanes })
+                : new THREE.MeshStandardMaterial({ color: opening.color, roughness: isGlassOp ? 0.15 : 0.8, metalness: isGlassOp ? 0.85 : 0.1, transparent: opening.opacity < 1, opacity: opening.opacity, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+            
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(opening.x, opening.y, opening.z);
             mesh.rotation.y = opening.rotationY; 
-            mesh.userData = { ...opening, id: `opening-${index}`, isSelectable: true };
+            mesh.userData = { ...opening, id: `opening-${index}`, isSelectable: true, baseColorHex: mat.color.getHex() };
             const edges = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor, opacity: 0.5, transparent: true, clippingPlanes: clipPlanes }));
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: isFloorplan ? (theme==='dark'?'#222':'#fff') : wireColor, opacity: isFloorplan ? 0.5 : 0.5, transparent: true, clippingPlanes: clipPlanes }));
             mesh.add(line);
             group.add(mesh);
           }
         });
       }
     }
-  }, [pluginOutputs, theme, visibility]);
+  }, [pluginOutputs, theme, visibility, mainViewMode, active2DView]); 
 
-  // Highlighter Logic
   useEffect(() => {
     if (!groupRef.current) return;
     groupRef.current.children.forEach(child => {
       if (child.userData?.isSelectable && child.material) {
         if (selectedObject && child.userData.id === selectedObject.id) {
-          child.material.emissive.setHex(0x3366ff);
-          child.material.emissiveIntensity = 0.6;
+          if (child.material.emissive) {
+            child.material.emissive.setHex(0x3366ff);
+            child.material.emissiveIntensity = 0.6;
+          } else if (child.material.color) {
+            child.material.color.setHex(0x3366ff);
+          }
         } else {
-          child.material.emissive.setHex(0x000000);
+          if (child.material.emissive) {
+            child.material.emissive.setHex(0x000000);
+          } else if (child.userData.baseColorHex !== undefined) {
+            child.material.color.setHex(child.userData.baseColorHex);
+          }
         }
       }
     });
-  }, [selectedObject, pluginOutputs, visibility]);
+  }, [selectedObject, pluginOutputs, visibility, mainViewMode]);
+
+  useEffect(() => {
+    if (cameraViewTrigger?.view) handleSetView(cameraViewTrigger.view);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraViewTrigger]);
 
   const fitCameraToBox = (box) => {
     if (!cameraRef.current || !controlsRef.current) return;
     const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const maxSize = Math.max(size.x, size.y, size.z);
-    const fitHeightDistance = maxSize / (2 * Math.atan((Math.PI * cameraRef.current.fov) / 360));
-    const fitWidthDistance = fitHeightDistance / cameraRef.current.aspect;
-    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
-    const direction = controlsRef.current.target.clone().sub(cameraRef.current.position).normalize().multiplyScalar(distance);
-    controlsRef.current.target.copy(center);
-    cameraRef.current.position.copy(controlsRef.current.target).sub(direction);
-    cameraRef.current.updateProjectionMatrix();
+    const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    const maxSize = Math.max(size.x, size.y, size.z) || 10;
+    
+    if (mainViewMode === '2D' && orthoCamRef.current) {
+        const f = maxSize * 0.6;
+        const aspect = orthoCamRef.current.right / orthoCamRef.current.top;
+        orthoCamRef.current.left = -f * aspect; orthoCamRef.current.right = f * aspect;
+        orthoCamRef.current.top = f; orthoCamRef.current.bottom = -f;
+        orthoCamRef.current.updateProjectionMatrix();
+        controlsRef.current.target.copy(center);
+    } else {
+        const fitHeightDistance = maxSize / (2 * Math.atan((Math.PI * cameraRef.current.fov) / 360));
+        const fitWidthDistance = fitHeightDistance / cameraRef.current.aspect;
+        const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
+        const direction = controlsRef.current.target.clone().sub(cameraRef.current.position).normalize().multiplyScalar(distance);
+        controlsRef.current.target.copy(center);
+        cameraRef.current.position.copy(controlsRef.current.target).sub(direction);
+        cameraRef.current.updateProjectionMatrix();
+    }
   };
 
   const handleZoomAll = () => {
@@ -967,49 +1544,80 @@ export default function Viewport3D() {
   const handleSetView = (viewType) => {
     if (!cameraRef.current || !controlsRef.current || !groupRef.current) return;
     const box = new THREE.Box3().setFromObject(groupRef.current);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+    const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    const size = box.isEmpty() ? new THREE.Vector3(10,10,10) : box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 10;
     const distance = maxDim * 1.5;
 
     controlsRef.current.target.copy(center);
+    
     if (viewType === 'top') cameraRef.current.position.set(center.x, center.y + distance, center.z + 0.1); 
+    if (viewType === 'bottom') cameraRef.current.position.set(center.x, center.y - distance, center.z + 0.1); 
     if (viewType === 'front') cameraRef.current.position.set(center.x, center.y, center.z + distance);
+    if (viewType === 'back') cameraRef.current.position.set(center.x, center.y, center.z - distance);
     if (viewType === 'left') cameraRef.current.position.set(center.x - distance, center.y, center.z);
+    if (viewType === 'right') cameraRef.current.position.set(center.x + distance, center.y, center.z);
     if (viewType === 'iso') cameraRef.current.position.set(center.x + distance, center.y + distance, center.z + distance);
+    
     cameraRef.current.updateProjectionMatrix();
   };
 
+  useEffect(() => {
+    if (!exportTrigger || !groupRef.current) return;
+
+    const link = document.createElement('a');
+    link.style.display = 'none';
+    document.body.appendChild(link);
+
+    const saveFile = (blob, filename) => {
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+
+    if (exportTrigger.format === 'gltf') {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        groupRef.current,
+        (gltf) => {
+          const blob = new Blob([gltf], { type: 'application/octet-stream' });
+          saveFile(blob, `BimCube_Model_${Date.now()}.glb`);
+        },
+        (error) => console.error('GLTF Export Error:', error),
+        { binary: true } 
+      );
+    } else if (exportTrigger.format === 'obj') {
+      const exporter = new OBJExporter();
+      const result = exporter.parse(groupRef.current);
+      const blob = new Blob([result], { type: 'text/plain' });
+      saveFile(blob, `BimCube_Geometry_${Date.now()}.obj`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportTrigger]);
+
   const isDark = theme === 'dark';
-  const toolbarStyle = {
-    position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
-    backgroundColor: isDark ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.85)',
-    backdropFilter: 'blur(10px)', border: `1px solid ${isDark ? '#333' : '#ddd'}`,
-    borderRadius: '8px', display: 'flex', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
-  };
-
-  const btnStyle = {
-    background: 'transparent', border: 'none', color: isDark ? '#aaa' : '#666', cursor: 'pointer',
-    padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s'
-  };
-
-  return (
-    <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div style={toolbarStyle}>
-        <button onClick={() => handleSetView('top')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Top</button>
-        <button onClick={() => handleSetView('front')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Front</button>
-        <button onClick={() => handleSetView('left')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Left</button>
-        <button onClick={() => handleSetView('iso')} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>Iso</button>
-        <div style={{ width: '1px', backgroundColor: isDark ? '#444' : '#ccc', margin: '0 4px' }} />
-        <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>🔍 Fit All</button>
-        {selectedObject && (
-          <button onClick={handleZoomSelected} style={{...btnStyle, color: '#3366ff'}} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
-            🎯 Fit Selected
-          </button>
+  
+  if (mainViewMode === '2D' || mainViewMode === '3D') {
+    return (
+      <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+        {mainViewMode === '3D' && (
+          <div style={{ position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10, backgroundColor: isDark ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(10px)', border: `1px solid ${isDark ? '#333' : '#ddd'}`, borderRadius: '8px', display: 'flex', alignItems: 'center', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+            <button onClick={handleZoomAll} style={{ background: 'transparent', border: 'none', color: isDark ? '#aaa' : '#666', cursor: 'pointer', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s' }} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>
+              🔍 Fit All
+            </button>
+            {selectedObject && (
+              <button onClick={handleZoomSelected} style={{ background: 'transparent', border: 'none', color: '#3366ff', cursor: 'pointer', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s' }} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
+                🎯 Fit Selected
+              </button>
+            )}
+          </div>
         )}
       </div>
-    </div>
-  );
+    );
+  }
+  
+  return null;
 }
 ```
 
@@ -1082,13 +1690,24 @@ export default function Slider({ label, min, max, step, value, onChange }) {
 ```text
 import { create } from 'zustand';
 
+const getTime = () => new Date().toLocaleTimeString([], { hour12: false });
+
 const useStore = create((set) => ({
   // UI Layout State
-  activeTab: 'inputs', // 'inputs', 'layers', 'section', 'view', 'log', 'output'
+  activeTab: 'inputs', 
   isLeftPanelOpen: true,
-  mainViewMode: '3D', // '2D', '3D', 'CSV', 'Map', 'Render'
+  mainViewMode: '3D', 
   
-  setActiveTab: (tab) => set({ activeTab: tab, isLeftPanelOpen: true }),
+  active2DView: 'Floorplan-0', 
+  setActive2DView: (view) => set({ active2DView: view }),
+  
+  cameraViewTrigger: null,
+  setCameraView: (view) => set({ cameraViewTrigger: { view, id: Math.random() } }),
+
+  exportTrigger: null,
+  triggerExport: (format) => set({ exportTrigger: { format, id: Math.random() } }),
+  
+  setActiveTab: (tab) => set({ activeTab: tab, isLeftPanelOpen: true, selectedObject: null }),
   toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
   setMainViewMode: (mode) => set({ mainViewMode: mode }),
 
@@ -1096,11 +1715,48 @@ const useStore = create((set) => ({
   activePluginId: null,
   pluginInputs: {},   
   pluginOutputs: {},  
-  theme: 'dark', 
+  theme: 'light', 
+
+  pastInputs: [],
+  futureInputs: [],
+  log: [`[${getTime()}] System initialized.`],
+
+  undo: () => set((state) => {
+    if (state.pastInputs.length === 0) return state;
+    const previous = state.pastInputs[state.pastInputs.length - 1];
+    const newPast = state.pastInputs.slice(0, -1);
+    return {
+      pastInputs: newPast,
+      futureInputs: [state.pluginInputs, ...state.futureInputs],
+      pluginInputs: previous,
+      log: [`[${getTime()}] UNDO triggered.`, ...state.log].slice(0, 100)
+    };
+  }),
+
+  redo: () => set((state) => {
+    if (state.futureInputs.length === 0) return state;
+    const next = state.futureInputs[0];
+    const newFuture = state.futureInputs.slice(1);
+    return {
+      pastInputs: [...state.pastInputs, state.pluginInputs],
+      futureInputs: newFuture,
+      pluginInputs: next,
+      log: [`[${getTime()}] REDO triggered.`, ...state.log].slice(0, 100)
+    };
+  }),
+
+  loadSession: (loadedInputs) => set((state) => {
+    return {
+      pastInputs: [...state.pastInputs, state.pluginInputs].slice(-50), 
+      futureInputs: [],
+      pluginInputs: { ...state.pluginInputs, ...loadedInputs },
+      log: [`[${getTime()}] Session loaded from file.`, ...state.log].slice(0, 100)
+    };
+  }),
   
   visibility: { levels: {}, types: {} },
   selectedObject: null,
-  setSelectedObject: (objData) => set({ selectedObject: objData, isLeftPanelOpen: true }), // Auto-open panel on select
+  setSelectedObject: (objData) => set({ selectedObject: objData, isLeftPanelOpen: true }),
 
   clipping: { enabled: false, axis: 'y', distance: 1.5 },
   setClipping: (updates) => set((state) => ({ clipping: { ...state.clipping, ...updates } })),
@@ -1120,10 +1776,36 @@ const useStore = create((set) => ({
     for (const [key, config] of Object.entries(manifest.inputs)) {
       if (updatedInputs[key] === undefined) updatedInputs[key] = config.defaultValue;
     }
-    return { activePluginId: manifest.id, pluginInputs: updatedInputs };
+    // 🪄 ALWAYS ENSURE SITE VARIABLES EXIST
+    if (updatedInputs.siteLat === undefined) updatedInputs.siteLat = 48.225023;
+    if (updatedInputs.siteLng === undefined) updatedInputs.siteLng = 16.330946;
+    if (updatedInputs.siteRotation === undefined) updatedInputs.siteRotation = 0;
+
+    return { 
+      activePluginId: manifest.id, 
+      pluginInputs: updatedInputs,
+      pastInputs: [], futureInputs: [], 
+      log: [`[${getTime()}] Loaded ${manifest.name}.`, ...state.log].slice(0, 100)
+    };
   }),
 
-  setInputValue: (key, value) => set((state) => ({ pluginInputs: { ...state.pluginInputs, [key]: value } })),
+  setInputValue: (key, value) => set((state) => {
+    let safeValue = value;
+    if (typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))) {
+        safeValue = Number(value);
+    }
+    if (state.pluginInputs[key] === safeValue) return state; 
+    
+    const newPast = [...state.pastInputs, state.pluginInputs].slice(-50); 
+    const newLog = [`[${getTime()}] Changed ${key} to ${safeValue}`, ...state.log].slice(0, 100);
+
+    return { 
+      pastInputs: newPast,
+      futureInputs: [], 
+      pluginInputs: { ...state.pluginInputs, [key]: safeValue },
+      log: newLog
+    };
+  }),
   
   setPluginOutputs: (data) => set((state) => {
     const newLevels = { ...state.visibility.levels };
@@ -1181,9 +1863,14 @@ export function compute(inputs) {
 import blueprint from './blueprint.json';
 
 export function compute(inputs) {
-    const { widthX, depthY, storeyCount, hGround, hTypical, hParapet, hWindow, wPilaster } = inputs;
+    const { 
+        widthX, depthY, storeyCount, hGround, hTypical, hParapet, 
+        colorCW1, colorCW2, colorGlass, alignType, wPanelGround, wPanelV, wPanelH 
+    } = inputs;
     
-    // 🪄 DYNAMIC Z-LEVEL GENERATOR
+    const activeGlassColor = colorGlass || "#8ab4f8";
+    const hWindow = Math.min(inputs.hWindow || 2.4, hTypical - 0.2);
+    
     const zLevels = [0, hGround];
     let currentZ = hGround;
     for (let i = 0; i < storeyCount; i++) {
@@ -1226,12 +1913,11 @@ export function compute(inputs) {
         }
     });
 
-    // 🪄 TEMPLATE CLONING ENGINE
     const expandBlueprint = (arr) => {
         const expanded = [];
         (arr || []).forEach(item => {
             const ref = item.p1 || item.gridStart;
-            if (!ref) { expanded.push(item); return; } // Pass through Facades
+            if (!ref) { expanded.push(item); return; } 
             
             if (ref.startsWith('Z0-')) {
                 expanded.push(item);
@@ -1295,7 +1981,7 @@ export function compute(inputs) {
         const p2Z = p2.z + (wallDef.offsetP2?.z || 0);
 
         let currentFloorHeight = zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : hParapet; 
-        if (mat.type === 'parapet') currentFloorHeight = hParapet; // Link to slider!
+        if (mat.type === 'parapet') currentFloorHeight = hParapet;
 
         const dx = p2X - p1X;
         const dz = p2Z - p1Z;
@@ -1344,7 +2030,75 @@ export function compute(inputs) {
         return wallA.isHorizontal; 
     };
 
-    const generatedWalls = rawWalls.map(wall => {
+    // 🪄 UPGRADED OPENING GENERATOR: Dot-Product checking and Structural Binding
+    const generatedOpenings = expandedOpenings.map((openingDef, index) => {
+        const p1 = pointMap[openingDef.gridStart];
+        const p2 = pointMap[openingDef.gridEnd];
+        
+        const opType = { ...blueprint.openingTypes[openingDef.type] };
+        
+        if (openingDef.type.startsWith('OW')) {
+            opType.height = hWindow; 
+            opType.color = activeGlassColor; 
+            opType.opacity = 0.65;
+        }
+        
+        if (!p1 || !p2 || !opType) return null;
+
+        const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
+        const midX = (p1.x + p2.x) / 2;
+        const midZ = (p1.z + p2.z) / 2;
+
+        // Vector of the opening itself
+        const oDx = p2.x - p1.x;
+        const oDz = p2.z - p1.z;
+        const oLen = Math.hypot(oDx, oDz);
+        const oDirX = oLen > 0.001 ? oDx / oLen : 0;
+        const oDirZ = oLen > 0.001 ? oDz / oLen : 0;
+
+        uniqueTypes.add(openingDef.type);
+        typeColors[openingDef.type] = opType.color;
+
+        const hostRawWall = rawWalls.find(w => {
+            if (w.level !== storeyIdx) return false;
+            const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
+            const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
+            if (Math.abs((d1 + d2) - w.length) > 0.5) return false; 
+            
+            // 🪄 THE FIX: Ensure the wall vector perfectly aligns with the opening vector!
+            if (oLen > 0.1) {
+                const dot = Math.abs(oDirX * w.dirX + oDirZ * w.dirZ);
+                if (dot < 0.5) return false; // This is a perpendicular intersection wall, reject it!
+            }
+            return true;
+        });
+
+        const hostWall = hostRawWall ? hostRawWall : null; 
+        let rotationY = 0, tangentX = 0, tangentZ = 0, thickness = 0.05, baseLevel = p1.y;
+
+        if (hostWall) {
+            rotationY = -Math.atan2(hostWall.dz, hostWall.dx); 
+            tangentX = hostWall.dirX; 
+            tangentZ = hostWall.dirZ;
+            baseLevel = hostWall.baseLevel;
+        } else {
+            tangentX = oDirX; tangentZ = oDirZ;
+            rotationY = -Math.atan2(oDz, oDx);
+        }
+
+        return {
+            id: `O${index}`, 
+            hostWallId: hostWall ? hostWall.id : null, // 🪄 STRUCTURAL BINDING: Save exact wall ID!
+            width: opType.width, height: opType.height, depth: thickness, // Sleek 50mm panes
+            x: midX, y: baseLevel + opType.sill + (opType.height / 2), z: midZ, 
+            rotationY, dirX: tangentX, dirZ: tangentZ, 
+            color: opType.color, opacity: opType.opacity, level: storeyIdx, typeId: openingDef.type, category: opType.category
+        };
+    }).filter(Boolean);
+
+    const generatedWalls = [];
+    
+    rawWalls.forEach(wall => {
         let p1Ext = 0, p2Ext = 0;
         
         const p1Comp = nodeConnections[wall.p1Id].filter(w => w.id !== wall.id);
@@ -1364,71 +2118,67 @@ export function compute(inputs) {
         const finalLen = wall.length + p1Ext + p2Ext;
         const newP1X = wall.p1X - (wall.dirX * p1Ext);
         const newP1Z = wall.p1Z - (wall.dirZ * p1Ext);
-        const newP2X = wall.p2X + (wall.dirX * p2Ext);
-        const newP2Z = wall.p2Z + (wall.dirZ * p2Ext);
         const topLvl = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
 
-        return { 
-            id: wall.id, length: finalLen, height: topLvl - wall.baseLevel, thickness: wall.mat.thickness, 
-            x: (newP1X + newP2X) / 2, y: wall.baseLevel + ((topLvl - wall.baseLevel) / 2), z: (newP1Z + newP2Z) / 2, 
-            rotationY: -Math.atan2(wall.dz, wall.dx), dirX: wall.dirX, dirZ: wall.dirZ, 
-            color: wall.mat.color, level: wall.level, typeId: wall.typeId, baseLevel: wall.baseLevel
+        // 🪄 ULTIMATE SUB-MESHING OPTIMIZATION: Only grab openings expressly bound to this wall!
+        const wallOpenings = generatedOpenings.filter(op => op.hostWallId === wall.id).map(op => {
+            const opD1 = Math.hypot(op.x - wall.p1X, op.z - wall.p1Z);
+            const wall1D = opD1 + p1Ext; 
+            return {
+                ...op,
+                wall1D,
+                start: Math.max(0, wall1D - (op.width / 2)),
+                end: Math.min(finalLen, wall1D + (op.width / 2)) 
+            };
+        }).sort((a, b) => a.start - b.start);
+
+        const generateSubWall = (subName, dStart, dEnd, yBase, h) => {
+            const wLen = dEnd - dStart;
+            if (wLen <= 0.01 || h <= 0.01) return; 
+            
+            const cx = newP1X + wall.dirX * (dStart + wLen / 2);
+            const cz = newP1Z + wall.dirZ * (dStart + wLen / 2);
+            
+            generatedWalls.push({
+                id: `${wall.id}-${subName}`, length: wLen, height: h, thickness: wall.mat.thickness,
+                x: cx, y: yBase + (h / 2), z: cz,
+                rotationY: -Math.atan2(wall.dz, wall.dx), dirX: wall.dirX, dirZ: wall.dirZ,
+                color: wall.mat.color, level: wall.level, typeId: wall.typeId, baseLevel: wall.baseLevel
+            });
         };
-    });
 
-    const generatedOpenings = expandedOpenings.map((openingDef, index) => {
-        const p1 = pointMap[openingDef.gridStart];
-        const p2 = pointMap[openingDef.gridEnd];
-        
-        // 🪄 LINKING WINDOW HEIGHT SLIDER
-        const opType = { ...blueprint.openingTypes[openingDef.type] };
-        if (openingDef.type.startsWith('OW')) opType.height = hWindow; 
-        
-        if (!p1 || !p2 || !opType) return null;
-
-        const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
-        const midX = (p1.x + p2.x) / 2;
-        const midZ = (p1.z + p2.z) / 2;
-
-        uniqueTypes.add(openingDef.type);
-        typeColors[openingDef.type] = opType.color;
-
-        const hostRawWall = rawWalls.find(w => {
-            if (w.level !== storeyIdx) return false;
-            const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
-            const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
-            return Math.abs((d1 + d2) - w.length) < 0.5; 
-        });
-
-        const hostWall = hostRawWall ? generatedWalls.find(w => w.id === hostRawWall.id) : null;
-        let rotationY = 0, tangentX = 0, tangentZ = 0, thickness = 0.2, baseLevel = p1.y;
-
-        if (hostWall) {
-            rotationY = hostWall.rotationY; tangentX = hostWall.dirX; tangentZ = hostWall.dirZ;
-            thickness = hostWall.thickness + 0.6; 
-            baseLevel = hostWall.baseLevel;
-        } else {
-            const dx = p2.x - p1.x; const dz = p2.z - p1.z;
-            const len = Math.hypot(dx, dz);
-            tangentX = dx / len; tangentZ = dz / len;
-            rotationY = -Math.atan2(dz, dx);
+        if (wallOpenings.length === 0) {
+            generateSubWall('Solid', 0, finalLen, wall.baseLevel, topLvl - wall.baseLevel);
+            return;
         }
 
-        return {
-            id: `O${index}`, width: opType.width, height: opType.height, depth: thickness, 
-            x: midX, y: baseLevel + opType.sill + (opType.height / 2), z: midZ, 
-            rotationY, dirX: tangentX, dirZ: tangentZ, 
-            color: opType.color, opacity: opType.opacity, level: storeyIdx, typeId: openingDef.type, category: opType.category
-        };
-    }).filter(Boolean);
+        let currentD = 0;
+        wallOpenings.forEach((op, opIdx) => {
+            if (op.start > currentD) generateSubWall(`Gap-${opIdx}`, currentD, op.start, wall.baseLevel, topLvl - wall.baseLevel);
+            
+            const sillHeight = op.y - (op.height / 2) - wall.baseLevel;
+            if (sillHeight > 0) generateSubWall(`Sill-${opIdx}`, op.start, op.end, wall.baseLevel, sillHeight);
 
-    // 🪄 SMART PROCEDURAL FACADE ARRAYS
+            const windowTop = op.y + (op.height / 2);
+            const lintelHeight = topLvl - windowTop;
+            if (lintelHeight > 0) generateSubWall(`Lintel-${opIdx}`, op.start, op.end, windowTop, lintelHeight);
+
+            currentD = Math.max(currentD, op.end);
+        });
+
+        if (currentD < finalLen) generateSubWall(`EndGap`, currentD, finalLen, wall.baseLevel, topLvl - wall.baseLevel);
+    });
+
     const generatedFacades = [];
     (blueprint.facades || []).forEach((facadeDef, fIndex) => {
         const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
         const p2 = pointMap[`Z0-${facadeDef.gridEnd}`];
         const mat = blueprint.materialTypes[facadeDef.mat];
         if (!p1 || !p2) return;
+
+        let baseColor = mat.color;
+        if (facadeDef.mat === 'CW1') baseColor = colorCW1 || mat.color;
+        if (facadeDef.mat === 'CW2') baseColor = colorCW2 || mat.color;
 
         const p1X = p1.x + (facadeDef.offsetX || 0);
         const p1Z = p1.z + (facadeDef.offsetZ || 0); 
@@ -1453,30 +2203,61 @@ export function compute(inputs) {
         const rotationY = -Math.atan2(finalDz, finalDx);
 
         uniqueTypes.add(facadeDef.mat);
-        typeColors[facadeDef.mat] = mat.color;
-
-        const gap = 0.02; 
-        const generatePanels = (bandName, dStart, dEnd, yStart, yEnd, panelW, color, opacity, lvl) => {
-            let d = dStart;
-            let pIndex = 0;
+        typeColors[facadeDef.mat] = baseColor;
+        
+        const generatePanels = (bandName, segmentStart, segmentEnd, yStart, yEnd, panelW, colorOverride, opacity, lvl, gapOverride = 0.02, spawnStuds = false) => {
             const h = yEnd - yStart;
-            if (h <= 0 || dEnd - dStart <= 0) return; 
+            if (h <= 0 || segmentEnd - segmentStart <= 0.01) return; 
             const midY = yStart + h / 2;
             
-            while (d < dEnd - 0.001) { 
-                const w = Math.min(panelW, dEnd - d);
-                const cx = finalP1X + dirX * (d + w / 2);
-                const cz = finalP1Z + dirZ * (d + w / 2);
-                
-                generatedFacades.push({
-                    id: `CW-${fIndex}-${bandName}-${pIndex}-${Math.round(d*10)}`,
-                    length: w, height: h, thickness: mat.thickness,
-                    x: cx, y: midY, z: cz,
-                    rotationY, dirX, dirZ, color, opacity, level: lvl, typeId: facadeDef.mat, baseLevel: 0
-                });
-                d += w + gap;
-                pIndex++;
+            const panelStep = panelW + gapOverride;
+            const totalPanels = Math.floor(finalLength / panelStep);
+            const remainder = finalLength - (totalPanels * panelStep); 
+            
+            let offset = 0;
+            if (alignType === 'center') offset = remainder / 2;
+            if (alignType === 'right') offset = remainder;
+
+            const masterPanels = [];
+            if (offset > 0) masterPanels.push({ start: 0, end: offset });
+            
+            let curr = offset > 0 ? offset + gapOverride : 0;
+            while (curr < finalLength) {
+               let next = Math.min(curr + panelW, finalLength);
+               masterPanels.push({ start: curr, end: next });
+               curr = next + gapOverride;
             }
+            
+            let pIndex = 0;
+            masterPanels.forEach(p => {
+                const iStart = Math.max(p.start, segmentStart);
+                const iEnd = Math.min(p.end, segmentEnd);
+                
+                if (iEnd - iStart > 0.005) { 
+                    const w = iEnd - iStart;
+                    const cx = finalP1X + dirX * (iStart + w / 2);
+                    const cz = finalP1Z + dirZ * (iStart + w / 2);
+                    generatedFacades.push({
+                        id: `CW-${fIndex}-${bandName}-${pIndex}-${Math.round(iStart*100)}`,
+                        length: w, height: h, thickness: mat.thickness,
+                        x: cx, y: midY, z: cz,
+                        rotationY, dirX, dirZ, color: colorOverride || baseColor, opacity, level: lvl, typeId: facadeDef.mat, baseLevel: 0
+                    });
+                }
+
+                if (spawnStuds && p.end < finalLength && p.end >= segmentStart && (p.end + gapOverride) <= segmentEnd) {
+                    const studW = gapOverride; 
+                    const studCx = finalP1X + dirX * (p.end + studW / 2);
+                    const studCz = finalP1Z + dirZ * (p.end + studW / 2);
+                    generatedFacades.push({
+                        id: `CW-${fIndex}-GroundStud-${pIndex}`,
+                        length: studW, height: h, thickness: 0.14, 
+                        x: studCx, y: midY, z: studCz,
+                        rotationY, dirX, dirZ, color: '#3a3a3a', opacity: 1, level: lvl, typeId: facadeDef.mat, baseLevel: 0
+                    });
+                }
+                pIndex++;
+            });
         };
 
         if (facadeDef.mat === 'CW2') {
@@ -1484,22 +2265,18 @@ export function compute(inputs) {
             generatedFacades.push({ 
                 id: `CW2-${fIndex}`, length: finalLength, height: topLevel, thickness: mat.thickness, 
                 x: (finalP1X + finalP2X) / 2, y: topLevel / 2, z: (finalP1Z + finalP2Z) / 2, 
-                rotationY, dirX, dirZ, color: mat.color, opacity: 1, level: 0, typeId: facadeDef.mat 
+                rotationY, dirX, dirZ, color: baseColor, opacity: 1, level: 0, typeId: facadeDef.mat 
             });
             return;
         }
 
         if (facadeDef.mat === 'CW1') {
-            
-            // 🪄 EXACT ARCHITECTURAL SPANDREL MATH
             const hSpandrel = hTypical - hWindow;
             const groundGlassHeight = hGround - hSpandrel;
 
-            // Level 0: Ground Floor
-            generatePanels('L0-Glass', 0, finalLength, 0, groundGlassHeight, 2.4, '#e0f7fa', 0.3, 0);
-            generatePanels('L0-Span', 0, finalLength, groundGlassHeight, zLevels[1], 2.4, mat.color, 1, 0);
+            generatePanels('L0-Glass', 0, finalLength, 0, groundGlassHeight, wPanelGround || 1.6, activeGlassColor, 0.65, 0, 0.06, true);
+            generatePanels('L0-Span', 0, finalLength, groundGlassHeight, zLevels[1], wPanelH, baseColor, 1, 0, 0.02, false);
 
-            // Level 1 to StoreyCount: Typical Floors
             for (let lvl = 1; lvl <= storeyCount; lvl++) {
                 const floorBase = zLevels[lvl];
                 const windowTop = floorBase + hWindow; 
@@ -1519,22 +2296,17 @@ export function compute(inputs) {
 
                 let currentD = 0;
                 floorOpenings.forEach(op => {
-                    if (op.start > currentD) {
-                        // Pilasters link to wPilaster slider!
-                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
-                    }
+                    if (op.start > currentD) generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, wPanelV, baseColor, 1, lvl);
                     currentD = Math.max(currentD, op.end);
                 });
-                if (currentD < finalLength) {
-                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
-                }
+                
+                if (currentD < finalLength) generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, wPanelV, baseColor, 1, lvl);
 
-                generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, 2.4, mat.color, 1, lvl);
+                generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, wPanelH, baseColor, 1, lvl);
             }
 
-            // Level Roof: Parapet Band
             const roofBase = zLevels[roofLevelIndex];
-            generatePanels('LR-Parapet', 0, finalLength, roofBase, roofBase + hParapet, 2.4, mat.color, 1, roofLevelIndex);
+            generatePanels('LR-Parapet', 0, finalLength, roofBase, roofBase + hParapet, wPanelH, baseColor, 1, roofLevelIndex);
         }
     });
 
@@ -1587,7 +2359,6 @@ export function compute(inputs) {
   ],
   "walls": [
     { "p1": "Z0-A0", "p2": "Z0-A8", "mat": "WE1" }, { "p1": "Z0-I8", "p2": "Z0-I0", "mat": "WE1" },
-    { "p1": "Z0-A8", "p2": "Z0-I8", "mat": "WE2" }, { "p1": "Z0-I0", "p2": "Z0-A0", "mat": "WE2" },
     { "p1": "Z0-A4", "p2": "Z0-C4", "mat": "WI2" }, { "p1": "Z0-G4", "p2": "Z0-I4", "mat": "WI2" },
     { "p1": "Z0-E0", "p2": "Z0-E1", "mat": "WI2" }, { "p1": "Z0-E7", "p2": "Z0-E8", "mat": "WI2" },
     { "p1": "Z0-C3", "p2": "Z0-C5", "mat": "WI1" }, { "p1": "Z0-C5", "p2": "Z0-D5", "mat": "WI1" },
@@ -1664,14 +2435,21 @@ export function compute(inputs) {
   "version": "2.0.0",
   "description": "Procedural Multi-Storey BIM Generator.",
   "inputs": {
-    "widthX": { "type": "range", "label": "Width (X)", "min": 21.5, "max": 28, "step": 0.5, "defaultValue": 22 },
+    "siteCoords": { "type": "location", "label": "Site Coordinates", "defaultValue": "48.225023, 16.330946, 0" },
+    "widthX": { "type": "range", "label": "Length (X)", "min": 20.5, "max": 28, "step": 0.5, "defaultValue": 22 },
     "depthY": { "type": "range", "label": "Depth (Y)", "min": 15, "max": 19, "step": 0.5, "defaultValue": 16 },
     "storeyCount": { "type": "range", "label": "Typical Stories", "min": 1, "max": 8, "step": 1, "defaultValue": 3 },
-    "hGround": { "type": "range", "label": "Ground Height", "min": 3.2, "max": 6.0, "step": 0.1, "defaultValue": 3.6 },
-    "hTypical": { "type": "range", "label": "Typical Height", "min": 3.0, "max": 4.2, "step": 0.1, "defaultValue": 3.2 },
-    "hWindow": { "type": "range", "label": "Window Height", "min": 2.1, "max": 3.6, "step": 0.1, "defaultValue": 2.4 },
-    "wPilaster": { "type": "range", "label": "Vertical Panel Width", "min": 0.4, "max": 5.0, "step": 0.1, "defaultValue": 0.8 },
-    "hParapet": { "type": "range", "label": "Parapet Height", "min": 0.4, "max": 1.2, "step": 0.1, "defaultValue": 0.8 }
+    "hGround": { "type": "range", "label": "Ground Height (Z)", "min": 2.5, "max": 6.0, "step": 0.1, "defaultValue": 3.6 },
+    "hTypical": { "type": "range", "label": "Typical Height (Z)", "min": 2.8, "max": 5.0, "step": 0.1, "defaultValue": 3.2 },
+    "hParapet": { "type": "range", "label": "Parapet Height (Z)", "min": 0.2, "max": 3.0, "step": 0.1, "defaultValue": 0.8 },
+    "colorCW1": { "type": "color", "label": "Color Front/Back", "defaultValue": "#cfd8dc" },
+    "colorCW2": { "type": "color", "label": "Color Sides", "defaultValue": "#fafafa" },
+    "colorGlass": { "type": "color", "label": "Glass / Window Color", "defaultValue": "#8ab4f8" },
+    "alignType": { "type": "select", "label": "Panel Alignment", "options": ["left", "center", "right"], "defaultValue": "center" },
+    "hWindow": { "type": "range", "label": "Window Height (Z)", "min": 1.9, "max": 4.0, "step": 0.1, "defaultValue": 2.4 },
+    "wPanelGround": { "type": "range", "label": "Ground Glass Width", "min": 0.5, "max": 6.0, "step": 0.1, "defaultValue": 1.6 },
+    "wPanelV": { "type": "range", "label": "Panel V Width", "min": 0.2, "max": 2.0, "step": 0.1, "defaultValue": 0.8 },
+    "wPanelH": { "type": "range", "label": "Panel H Width", "min": 0.5, "max": 6.0, "step": 0.1, "defaultValue": 2.4 }
   },
   "outputs": {
     "description": "Parametric Highrise Generation"

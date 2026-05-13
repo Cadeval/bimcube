@@ -104,7 +104,6 @@ export default function Viewport3D() {
 
     renderer.domElement.addEventListener('click', onMouseClick);
 
-    // 🪄 Safe Request Animation Frame Restored!
     let animationFrameId;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
@@ -353,6 +352,35 @@ export default function Viewport3D() {
           }
         });
       }
+
+      if (pluginOutputs.rooms) {
+        pluginOutputs.rooms.forEach((room, index) => {
+          if (visibility.levels[room.level] && visibility.types[room.typeId]) {
+            if (isFloorplan && room.level > activeLvl) return;
+
+            const shape = new THREE.Shape();
+            room.points.forEach((pt, i) => {
+              if (i === 0) shape.moveTo(pt.x, -pt.z);
+              else shape.lineTo(pt.x, -pt.z);
+            });
+
+            const extrudeSettings = { depth: room.height, bevelEnabled: false };
+            const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            geom.rotateX(-Math.PI / 2); 
+
+            const mat = isFloorplan 
+                ? new THREE.MeshBasicMaterial({ color: room.color, opacity: 0.6, transparent: true, side: THREE.DoubleSide, clippingPlanes: clipPlanes })
+                : new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.15, transparent: true, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(0, room.y, 0); 
+            mesh.userData = { ...room, id: `room-${room.id}`, isSelectable: true, category: 'IfcSpace', baseColorHex: mat.color.getHex() };
+            
+            group.add(mesh);
+          }
+        });
+      }
+
     }
   }, [pluginOutputs, theme, visibility, mainViewMode, active2DView]); 
 

@@ -54,29 +54,32 @@ export function compute(inputs) {
     const expandBlueprint = (arr) => {
         const expanded = [];
         (arr || []).forEach(item => {
-            const ref = item.p1 || item.gridStart;
+            const ref = item.p1 || item.gridStart || item.level;
             if (!ref) { expanded.push(item); return; } 
             
-            if (ref.startsWith('Z0-')) {
+            if (ref.startsWith('Z0-') || ref === 'Z0') {
                 expanded.push(item);
-            } else if (ref.startsWith('ZR-')) {
-                const newLvl = `Z${roofLevelIndex}-`;
+            } else if (ref.startsWith('ZR-') || ref === 'ZR') {
+                const newLvl = `Z${roofLevelIndex}`;
                 expanded.push({
                     ...item,
-                    p1: item.p1 ? item.p1.replace('ZR-', newLvl) : undefined,
-                    p2: item.p2 ? item.p2.replace('ZR-', newLvl) : undefined,
-                    gridStart: item.gridStart ? item.gridStart.replace('ZR-', newLvl) : undefined,
-                    gridEnd: item.gridEnd ? item.gridEnd.replace('ZR-', newLvl) : undefined
+                    level: item.level ? newLvl : undefined,
+                    p1: item.p1 ? item.p1.replace('ZR-', `${newLvl}-`) : undefined,
+                    p2: item.p2 ? item.p2.replace('ZR-', `${newLvl}-`) : undefined,
+                    gridStart: item.gridStart ? item.gridStart.replace('ZR-', `${newLvl}-`) : undefined,
+                    gridEnd: item.gridEnd ? item.gridEnd.replace('ZR-', `${newLvl}-`) : undefined
                 });
-            } else if (ref.startsWith('Z1-')) {
+            } else if (ref.startsWith('Z1-') || ref === 'Z1') {
                 for (let lvl = 1; lvl <= storeyCount; lvl++) {
-                    const newLvl = `Z${lvl}-`;
+                    const newLvl = `Z${lvl}`;
                     expanded.push({
                         ...item,
-                        p1: item.p1 ? item.p1.replace('Z1-', newLvl) : undefined,
-                        p2: item.p2 ? item.p2.replace('Z1-', newLvl) : undefined,
-                        gridStart: item.gridStart ? item.gridStart.replace('Z1-', newLvl) : undefined,
-                        gridEnd: item.gridEnd ? item.gridEnd.replace('Z1-', newLvl) : undefined
+                        id: item.id ? `${item.id}-L${lvl}` : undefined,
+                        level: item.level ? newLvl : undefined,
+                        p1: item.p1 ? item.p1.replace('Z1-', `${newLvl}-`) : undefined,
+                        p2: item.p2 ? item.p2.replace('Z1-', `${newLvl}-`) : undefined,
+                        gridStart: item.gridStart ? item.gridStart.replace('Z1-', `${newLvl}-`) : undefined,
+                        gridEnd: item.gridEnd ? item.gridEnd.replace('Z1-', `${newLvl}-`) : undefined
                     });
                 }
             }
@@ -87,6 +90,7 @@ export function compute(inputs) {
     const expandedSlabs = expandBlueprint(blueprint.slabs);
     const expandedWalls = expandBlueprint(blueprint.walls);
     const expandedOpenings = expandBlueprint(blueprint.openings);
+    const expandedRooms = expandBlueprint(blueprint.rooms);
 
     const generatedSlabs = expandedSlabs.map(slabDef => {
         const p1 = pointMap[slabDef.p1];
@@ -168,7 +172,6 @@ export function compute(inputs) {
         return wallA.isHorizontal; 
     };
 
-    // 🪄 UPGRADED OPENING GENERATOR: Dot-Product checking and Structural Binding
     const generatedOpenings = expandedOpenings.map((openingDef, index) => {
         const p1 = pointMap[openingDef.gridStart];
         const p2 = pointMap[openingDef.gridEnd];
@@ -187,7 +190,6 @@ export function compute(inputs) {
         const midX = (p1.x + p2.x) / 2;
         const midZ = (p1.z + p2.z) / 2;
 
-        // Vector of the opening itself
         const oDx = p2.x - p1.x;
         const oDz = p2.z - p1.z;
         const oLen = Math.hypot(oDx, oDz);
@@ -202,11 +204,9 @@ export function compute(inputs) {
             const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
             const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
             if (Math.abs((d1 + d2) - w.length) > 0.5) return false; 
-            
-            // 🪄 THE FIX: Ensure the wall vector perfectly aligns with the opening vector!
             if (oLen > 0.1) {
                 const dot = Math.abs(oDirX * w.dirX + oDirZ * w.dirZ);
-                if (dot < 0.5) return false; // This is a perpendicular intersection wall, reject it!
+                if (dot < 0.5) return false;
             }
             return true;
         });
@@ -225,9 +225,8 @@ export function compute(inputs) {
         }
 
         return {
-            id: `O${index}`, 
-            hostWallId: hostWall ? hostWall.id : null, // 🪄 STRUCTURAL BINDING: Save exact wall ID!
-            width: opType.width, height: opType.height, depth: thickness, // Sleek 50mm panes
+            id: `O${index}`, hostWallId: hostWall ? hostWall.id : null, 
+            width: opType.width, height: opType.height, depth: thickness, 
             x: midX, y: baseLevel + opType.sill + (opType.height / 2), z: midZ, 
             rotationY, dirX: tangentX, dirZ: tangentZ, 
             color: opType.color, opacity: opType.opacity, level: storeyIdx, typeId: openingDef.type, category: opType.category
@@ -258,7 +257,6 @@ export function compute(inputs) {
         const newP1Z = wall.p1Z - (wall.dirZ * p1Ext);
         const topLvl = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
 
-        // 🪄 ULTIMATE SUB-MESHING OPTIMIZATION: Only grab openings expressly bound to this wall!
         const wallOpenings = generatedOpenings.filter(op => op.hostWallId === wall.id).map(op => {
             const opD1 = Math.hypot(op.x - wall.p1X, op.z - wall.p1Z);
             const wall1D = opD1 + p1Ext; 
@@ -448,6 +446,56 @@ export function compute(inputs) {
         }
     });
 
+    const generatedRooms = expandedRooms.map((roomDef) => {
+        const storeyIdx = parseInt(roomDef.level.substring(1));
+        const yBase = zLevels[storeyIdx];
+        const height = (zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - yBase : hParapet) - 0.42; 
+        
+        const roomType = blueprint.roomTypes[roomDef.type] || { color: "#ffffff" };
+
+        uniqueTypes.add(`Space: ${roomDef.type}`);
+        typeColors[`Space: ${roomDef.type}`] = roomType.color;
+
+        const polygon = [];
+        let valid = true;
+
+        roomDef.points.forEach(ptDef => {
+            let ptStr = "";
+            let ox = 0, oz = 0;
+
+            if (typeof ptDef === 'string') {
+                ptStr = `Z${storeyIdx}-${ptDef}`;
+            } else {
+                ptStr = `Z${storeyIdx}-${ptDef.grid}`;
+                ox = ptDef.offsetX || 0;
+                oz = ptDef.offsetZ || 0;
+            }
+
+            const gridNode = pointMap[ptStr];
+            if (gridNode) {
+                polygon.push({ x: gridNode.x + ox, z: gridNode.z + oz });
+            } else {
+                valid = false;
+            }
+        });
+
+        if (!valid || polygon.length < 3) return null;
+
+        let area = 0;
+        for (let i = 0; i < polygon.length; i++) {
+            const j = (i + 1) % polygon.length;
+            area += polygon[i].x * polygon[j].z;
+            area -= polygon[j].x * polygon[i].z;
+        }
+        area = Math.abs(area / 2);
+
+        return {
+            id: roomDef.id, name: roomDef.type, typeId: `Space: ${roomDef.type}`, level: storeyIdx,
+            y: yBase, height: height, points: polygon, area: area, volume: area * height,
+            color: roomType.color
+        };
+    }).filter(Boolean);
+
     return {
         description: `Parametric ${storeyCount + 2}-Storey Highrise Engine`,
         renderType: 'floorplan-grid', 
@@ -455,6 +503,7 @@ export function compute(inputs) {
         meta: { levels: Array.from(uniqueLevels).sort(), types: Array.from(uniqueTypes).sort(), colors: typeColors },
         coordinates: points, slabs: generatedSlabs, 
         walls: [...generatedWalls, ...generatedFacades], 
-        openings: generatedOpenings
+        openings: generatedOpenings,
+        rooms: generatedRooms 
     };
 }
