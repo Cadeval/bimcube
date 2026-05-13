@@ -15,10 +15,7 @@ export default function MainArea() {
     const xGrids = new Set();
     const zGrids = new Set();
     pluginOutputs.coordinates.forEach(c => {
-      if (c.name) {
-        xGrids.add(c.name.charAt(0)); 
-        zGrids.add(c.name.charAt(1)); 
-      }
+      if (c.name) { xGrids.add(c.name.charAt(0)); zGrids.add(c.name.charAt(1)); }
     });
     Array.from(xGrids).sort().forEach(g => viewOptions.push({ id: `Section-X-${g}`, label: `✂️ Section Grid ${g}` }));
     Array.from(zGrids).sort().forEach(g => viewOptions.push({ id: `Section-Z-${g}`, label: `✂️ Section Grid ${g}` }));
@@ -28,14 +25,12 @@ export default function MainArea() {
     if (!pluginOutputs || pluginOutputs.renderType !== 'floorplan-grid') {
         return <div style={{ padding: '4rem', color: isDark ? '#fff' : '#000', fontFamily: 'monospace' }}>// Generate layout to view data...</div>;
     }
-
     const qto = {};
     if (pluginOutputs.slabs) pluginOutputs.slabs.forEach(slab => {
         const type = slab.typeId || 'Unknown Slab';
         if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: true };
         qto[type].count += 1; qto[type].area += (slab.width * slab.depth); qto[type].volume += (slab.width * slab.depth * slab.height);
     });
-
     if (pluginOutputs.walls) pluginOutputs.walls.forEach(wall => {
         const type = wall.typeId || 'Unknown Wall';
         if (!qto[type]) qto[type] = { count: 0, length: 0, area: 0, volume: 0, isSlab: false };
@@ -46,7 +41,6 @@ export default function MainArea() {
     const borderCol = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.1)';
     const txtCol = isDark ? '#ffffff' : '#111111';
     const dimCol = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
-
     const cellStyle = { padding: '12px', borderBottom: `1px solid ${borderCol}`, textAlign: 'right', color: txtCol };
     const headerStyle = { ...cellStyle, color: dimCol, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' };
 
@@ -84,18 +78,11 @@ export default function MainArea() {
       <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10, display: 'flex', gap: '8px' }}>
         
         {mainViewMode === '3D' && (
-           <select 
-             onChange={(e) => { setCameraView(e.target.value); e.target.value = 'default'; }}
-             defaultValue="default"
-             style={selectStyle}
-           >
+           <select onChange={(e) => { setCameraView(e.target.value); e.target.value = 'default'; }} defaultValue="default" style={selectStyle}>
              <option value="default" disabled hidden>🎥 Set Camera...</option>
-             <option value="top">Top</option>
-             <option value="bottom">Bottom</option>
-             <option value="front">Front</option>
-             <option value="back">Back</option>
-             <option value="left">Left</option>
-             <option value="right">Right</option>
+             <option value="top">Top</option><option value="bottom">Bottom</option>
+             <option value="front">Front</option><option value="back">Back</option>
+             <option value="left">Left</option><option value="right">Right</option>
              <option value="iso">Isometric</option>
            </select>
         )}
@@ -106,20 +93,29 @@ export default function MainArea() {
            </select>
         )}
 
-        {/* 🪄 NEW: AR Mode added to the dropdown */}
         <select value={mainViewMode} onChange={(e) => setMainViewMode(e.target.value)} style={selectStyle}>
           <option value="3D">🧊 3D View</option>
           <option value="2D">📐 2D Plan</option>
-          <option value="AR">👓 AR Mode</option> 
           <option value="Map">🗺️ Map Mode</option> 
+          <option value="AR">👓 AR Mode</option> 
           <option value="CSV">📊 CSV Data</option>
         </select>
       </div>
 
-      {/* 🪄 RENDER VIEWPORT FOR AR MODE TOO */}
-      {(mainViewMode === '3D' || mainViewMode === '2D' || mainViewMode === 'AR') && <Viewport3D />}
+      {(mainViewMode === '3D' || mainViewMode === '2D') && <Viewport3D />}
       {mainViewMode === 'CSV' && generateQTO()}
       {mainViewMode === 'Map' && <MapArea />} 
+      
+      {/* 🪄 WORK IN PROGRESS AR SCREEN */}
+      {mainViewMode === 'AR' && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: isDark ? '#fff' : '#111', backgroundColor: isDark ? '#1a1a1a' : '#f0f0f0' }}>
+            <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>👓</h1>
+            <h2 style={{ fontWeight: '900', marginBottom: '0.5rem' }}>WebXR / AR Mode</h2>
+            <p style={{ color: isDark ? '#aaa' : '#666', maxWidth: '400px', textAlign: 'center', lineHeight: '1.6' }}>
+              We are currently optimizing the 1:1 scale building projection for mobile devices and Apple Vision Pro. Check back in the next update!
+            </p>
+        </div>
+      )}
     </div>
   );
 }

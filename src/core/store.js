@@ -25,7 +25,7 @@ const useStore = create((set) => ({
   activePluginId: null,
   pluginInputs: {},   
   pluginOutputs: {},  
-  theme: 'dark', 
+  theme: 'light', 
 
   pastInputs: [],
   futureInputs: [],
