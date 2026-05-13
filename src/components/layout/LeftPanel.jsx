@@ -186,8 +186,32 @@ export default function LeftPanel() {
             )}
             
             {activeTab === 'view' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>Camera settings...</div>}
-            {activeTab === 'output' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>Export tools...</div>}
-            
+            {activeTab === 'output' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>3D Model Export</h4>
+                
+                <button 
+                  onClick={() => useStore.getState().triggerExport('gltf')}
+                  style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>📦</span> Export GLB (Recommended)
+                </button>
+                
+                <button 
+                  onClick={() => useStore.getState().triggerExport('obj')}
+                  style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>🧊</span> Export OBJ (Raw Geometry)
+                </button>
+
+                <p style={{ fontSize: '0.75rem', color: dimCol, marginTop: '8px', lineHeight: '1.5' }}>
+                  <strong>GLB</strong> preserves colors, metallic materials, and glass transparency perfectly.<br/><br/>
+                  <strong>OBJ</strong> only exports the raw gray geometry meshes.
+                </p>
+              </div>
+            )}
             {activeTab === 'log' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <button onClick={exportSession} style={{ width: '100%', padding: '10px', marginBottom: '16px', backgroundColor: '#3366ff', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(51, 102, 255, 0.3)' }}>

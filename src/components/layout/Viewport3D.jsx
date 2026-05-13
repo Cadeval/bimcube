@@ -2,12 +2,17 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'; 
+import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'; 
 import useStore from '../../core/store';
 
 export default function Viewport3D() {
   const mountRef = useRef(null);
   
-  const { pluginOutputs, theme, visibility, selectedObject, clipping, mainViewMode, active2DView, cameraViewTrigger } = useStore();
+  const { 
+    pluginOutputs, theme, visibility, selectedObject, clipping, 
+    mainViewMode, active2DView, cameraViewTrigger, exportTrigger 
+  } = useStore();
   
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
@@ -22,6 +27,7 @@ export default function Viewport3D() {
   const uiClipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5)); 
   const viewClipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1000)); 
 
+  // 1. INITIALIZE SCENE & CAMERAS
   useEffect(() => {
     const currentMount = mountRef.current;
     if (!currentMount) return;
@@ -83,7 +89,6 @@ export default function Viewport3D() {
       
       raycaster.setFromCamera(mouse, cameraRef.current);
 
-      // 🪄 THE RAYCASTER FIX: Mathematically ignore clicks on clipped/hidden objects!
       const intersects = raycaster.intersectObjects(group.children, true).filter(i => {
          if (!i.object.userData?.isSelectable) return false;
          if (clipping.enabled && uiClipPlaneRef.current.distanceToPoint(i.point) < 0) return false;
@@ -133,6 +138,7 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 2. UI CLIPPING PLANE
   useEffect(() => {
     if (!rendererRef.current) return;
     if (!clipping.enabled) {
@@ -145,6 +151,7 @@ export default function Viewport3D() {
     uiClipPlaneRef.current.constant = clipping.distance;
   }, [clipping]);
 
+  // 3. THE 2D MODE SWITCHER ENGINE
   useEffect(() => {
     if (!controlsRef.current || !groupRef.current) return;
     const controls = controlsRef.current;
@@ -193,6 +200,7 @@ export default function Viewport3D() {
     }
   }, [mainViewMode, active2DView, pluginOutputs]);
 
+  // 4. HIDE GRID IN 2D MODE
   useEffect(() => {
     if (!sceneRef.current) return;
     sceneRef.current.background = null; 
@@ -207,7 +215,7 @@ export default function Viewport3D() {
     }
   }, [theme, mainViewMode]);
 
-  // 🪄 THE ARCHITECTURAL FILTER ENGINE
+  // 5. THE ARCHITECTURAL GEOMETRY & MATERIAL ENGINE
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -226,7 +234,7 @@ export default function Viewport3D() {
         const dotMat = new THREE.MeshBasicMaterial({ color: '#00d1b2', clippingPlanes: clipPlanes });
         pluginOutputs.coordinates.forEach(pt => {
           if (visibility.levels[pt.level] && visibility.types[pt.typeId]) {
-            if (isFloorplan && pt.level > activeLvl) return; // 🪄 Hide upper grids!
+            if (isFloorplan && pt.level > activeLvl) return;
 
             const dot = new THREE.Mesh(dotGeom, dotMat);
             dot.position.set(pt.x, pt.y, pt.z);
@@ -245,11 +253,10 @@ export default function Viewport3D() {
       if (pluginOutputs.slabs) {
         pluginOutputs.slabs.forEach((slab, index) => {
           if (visibility.levels[slab.level] && visibility.types[slab.typeId]) {
-            if (isFloorplan && slab.level > activeLvl) return; // 🪄 Hide upper slabs!
+            if (isFloorplan && slab.level > activeLvl) return; 
 
             const geom = new THREE.BoxGeometry(slab.width, slab.height, slab.depth);
             
-            // Floorplans are Flat, Sections & 3D are Shaded (with DoubleSide for realistic cut hollows)
             const mat = isFloorplan 
                 ? new THREE.MeshBasicMaterial({ color: theme === 'dark' ? '#222222' : '#f0f0f0', side: THREE.DoubleSide, clippingPlanes: clipPlanes })
                 : new THREE.MeshStandardMaterial({ color: slab.color, roughness: 0.8, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
@@ -265,7 +272,7 @@ export default function Viewport3D() {
       if (pluginOutputs.walls) {
         pluginOutputs.walls.forEach((wall, index) => {
           if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
-            if (isFloorplan && wall.level > activeLvl) return; // 🪄 Hide upper walls!
+            if (isFloorplan && wall.level > activeLvl) return; 
 
             const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
             
@@ -309,7 +316,6 @@ export default function Viewport3D() {
             
             if (!isStud) {
                 const edges = new THREE.EdgesGeometry(geom);
-                // Remove wireframes entirely from Sections to let the shading look realistic!
                 const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: isFloorplan ? (theme==='dark'?'#222':'#fff') : wireColor, opacity: isFloorplan ? 0.3 : 0.15, transparent: true, clippingPlanes: clipPlanes }));
                 mesh.add(line);
             }
@@ -344,6 +350,7 @@ export default function Viewport3D() {
     }
   }, [pluginOutputs, theme, visibility, mainViewMode, active2DView]); 
 
+  // 6. SAFE HIGHLIGHTING ENGINE
   useEffect(() => {
     if (!groupRef.current) return;
     groupRef.current.children.forEach(child => {
@@ -366,6 +373,7 @@ export default function Viewport3D() {
     });
   }, [selectedObject, pluginOutputs, visibility, mainViewMode]);
 
+  // 7. CAMERA SNAPPING TRIGGER
   useEffect(() => {
     if (cameraViewTrigger?.view) handleSetView(cameraViewTrigger.view);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -427,6 +435,42 @@ export default function Viewport3D() {
     
     cameraRef.current.updateProjectionMatrix();
   };
+
+  // 8. THE EXPORT ENGINE
+  useEffect(() => {
+    if (!exportTrigger || !groupRef.current) return;
+
+    const link = document.createElement('a');
+    link.style.display = 'none';
+    document.body.appendChild(link);
+
+    const saveFile = (blob, filename) => {
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+
+    if (exportTrigger.format === 'gltf') {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        groupRef.current,
+        (gltf) => {
+          const blob = new Blob([gltf], { type: 'application/octet-stream' });
+          saveFile(blob, `BimCube_Model_${Date.now()}.glb`);
+        },
+        (error) => console.error('GLTF Export Error:', error),
+        { binary: true } 
+      );
+    } else if (exportTrigger.format === 'obj') {
+      const exporter = new OBJExporter();
+      const result = exporter.parse(groupRef.current);
+      const blob = new Blob([result], { type: 'text/plain' });
+      saveFile(blob, `BimCube_Geometry_${Date.now()}.obj`);
+    }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportTrigger]);
 
   const isDark = theme === 'dark';
   

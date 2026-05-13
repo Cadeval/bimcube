@@ -14,7 +14,9 @@ const useStore = create((set) => ({
   // 🪄 NEW: Camera Trigger State
   cameraViewTrigger: null,
   setCameraView: (view) => set({ cameraViewTrigger: { view, id: Math.random() } }),
-  
+  // 🪄 NEW: Export Trigger State
+  exportTrigger: null,
+  triggerExport: (format) => set({ exportTrigger: { format, id: Math.random() } }),
   setActiveTab: (tab) => set({ activeTab: tab, isLeftPanelOpen: true, selectedObject: null }),
   toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
   setMainViewMode: (mode) => set({ mainViewMode: mode }),
