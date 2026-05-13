@@ -88,25 +88,37 @@ export default defineConfig({
 
 **C:\Projects\bimcube\src\App.jsx**
 ```text
-import LeftPane from './components/layout/LeftPane';
-import MiddlePane from './components/layout/MiddlePane';
-import RightPane from './components/layout/RightPane';
+import { useEffect } from 'react';
+import useStore from './core/store';
+import floorplanManifest from './plugins/FloorplanGrid/manifest.json';
+
+import Sidebar from './components/layout/Sidebar';
+import LeftPanel from './components/layout/LeftPanel';
+import MainArea from './components/layout/MainArea';
 
 function App() {
+  const { setActivePlugin, theme } = useStore();
+
+  // Initialize default plugin on load
+  useEffect(() => {
+    setActivePlugin(floorplanManifest);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div style={{ 
-      position: 'relative', // 🪄 NEW: Allows elements to float inside
+      position: 'relative', 
       width: '100vw', 
       height: '100vh', 
-      backgroundColor: '#121212', 
-      color: '#e0e0e0', 
+      backgroundColor: theme === 'dark' ? '#121212' : '#f5f5f5', 
+      color: theme === 'dark' ? '#e0e0e0' : '#111111', 
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      overflow: 'hidden' // Prevents scrollbars from floating panels
+      overflow: 'hidden',
+      display: 'flex'
     }}>
-      {/* 🪄 RightPane is rendered FIRST so it stays in the background */}
-      <RightPane />
-      <LeftPane />
-      <MiddlePane />
+      <Sidebar />
+      <LeftPanel />
+      <MainArea />
     </div>
   );
 }
@@ -180,9 +192,206 @@ export default function LeftPane() {
 }
 ```
 
+**C:\Projects\bimcube\src\components\layout\LeftPanel.jsx**
+```text
+import useStore from '../../core/store';
+import Slider from '../ui/Slider';
+
+export default function LeftPanel() {
+  const { 
+    isLeftPanelOpen, toggleLeftPanel, activeTab, theme, 
+    selectedObject, setSelectedObject, pluginInputs, setInputValue,
+    visibility, toggleLevel, toggleType, pluginOutputs,
+    clipping, setClipping
+  } = useStore();
+  
+  const isDark = theme === 'dark';
+  const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const txtCol = isDark ? '#fff' : '#111';
+  const dimCol = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+  const hoverBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+
+  if (!isLeftPanelOpen) return null;
+
+  const getTitle = () => {
+    if (selectedObject) return `Selected: ${selectedObject.category}`;
+    const titles = { inputs: 'Parameters', layers: 'Layers', section: 'Sectioning', view: 'View Settings', log: 'Event Log', output: 'Export Output' };
+    return titles[activeTab] || 'Settings';
+  };
+
+  // Helper for button styles in Layers
+  const btnStyle = (isVisible) => ({
+    display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', 
+    color: isVisible ? txtCol : dimCol, cursor: 'pointer', padding: '8px 6px', width: '100%', 
+    textAlign: 'left', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s', borderRadius: '4px'
+  });
+
+  const availableLevels = pluginOutputs?.meta?.levels || [];
+  const typeColors = pluginOutputs?.meta?.colors || {};
+
+  return (
+    <div style={{
+      width: '280px', height: '100%', zIndex: 40, display: 'flex', flexDirection: 'column',
+      backgroundColor: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(250, 250, 250, 0.9)',
+      backdropFilter: 'blur(12px)', borderRight: `1px solid ${borderCol}`,
+      boxShadow: '4px 0 24px rgba(0,0,0,0.1)'
+    }}>
+      
+      {/* HEADER */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${borderCol}` }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer' }}>◀</button>
+          <button style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'not-allowed' }}>▶</button>
+          <button style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer', marginLeft: '8px' }}>💾</button>
+        </div>
+        <button onClick={toggleLeftPanel} style={{ background: 'transparent', border: 'none', color: txtCol, cursor: 'pointer', fontWeight: 'bold' }}>
+          [ {`<`} ]
+        </button>
+      </div>
+
+      <div style={{ padding: '16px 16px 8px 16px', fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px', color: dimCol }}>
+        {getTitle()}
+      </div>
+
+      {/* CONTENT AREA */}
+      <div style={{ padding: '0 16px 16px 16px', overflowY: 'auto', flex: 1 }}>
+        
+        {selectedObject ? (
+          <div>
+            <button onClick={() => setSelectedObject(null)} style={{ width: '100%', padding: '8px', marginBottom: '16px', background: isDark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.05)', border: 'none', color: txtCol, cursor: 'pointer', borderRadius: '4px' }}>
+              ✕ Deselect
+            </button>
+            <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Type:</span> <strong>{selectedObject.typeId}</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Level:</span> <strong>0{selectedObject.level}</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Height:</span> <strong>{selectedObject.height?.toFixed(2)} m</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Thickness:</span> <strong>{((selectedObject.depth || selectedObject.thickness) * 1000)?.toFixed(0)} mm</strong></div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* 1. INPUTS TAB */}
+            {activeTab === 'inputs' && (
+              Object.entries(pluginInputs).map(([key, val]) => (
+                 <Slider key={key} label={key} min={0.1} max={30} step={0.1} value={val} onChange={(v) => setInputValue(key, v)} />
+              ))
+            )}
+
+            {/* 2. LAYERS TAB */}
+            {activeTab === 'layers' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>Storeys</h4>
+                {availableLevels.map(lvl => (
+                  <button key={`lvl-${lvl}`} onClick={() => toggleLevel(lvl)} style={btnStyle(visibility.levels[lvl])} onMouseOver={e=>e.currentTarget.style.background=hoverBg} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                    <span style={{ marginRight: '8px', opacity: visibility.levels[lvl] ? 1 : 0.3 }}>👁️</span> Level 0{lvl}
+                  </button>
+                ))}
+                
+                <h4 style={{ margin: '16px 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>Elements</h4>
+                {Object.keys(visibility.types).sort().map(type => (
+                  <button key={`type-${type}`} onClick={() => toggleType(type)} style={btnStyle(visibility.types[type])} onMouseOver={e=>e.currentTarget.style.background=hoverBg} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                    <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: typeColors[type] || '#ccc', marginRight: '10px', opacity: visibility.types[type] ? 1 : 0.2 }}></span>
+                    {type}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 3. SECTIONING TAB */}
+            {activeTab === 'section' && (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <span style={{ fontSize: '0.85rem', color: txtCol, fontWeight: 'bold' }}>Enable Cut</span>
+                  <input type="checkbox" checked={clipping.enabled} onChange={(e) => setClipping({ enabled: e.target.checked })} style={{ cursor: 'pointer', accentColor: '#4af626', width: '18px', height: '18px' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>
+                  {['y', 'x', 'z'].map(axis => (
+                    <button key={axis} onClick={() => setClipping({ axis })} 
+                      style={{ flex: 1, padding: '8px', borderRadius: '4px', border: `1px solid ${borderCol}`, cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem', backgroundColor: clipping.axis === axis ? (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)') : 'transparent', color: clipping.axis === axis ? txtCol : dimCol }}
+                    >
+                      {axis.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.8rem', color: dimCol }}>
+                  <span>Cut Distance</span><span style={{ color: txtCol, fontWeight: 'bold' }}>{clipping.distance.toFixed(1)}m</span>
+                </div>
+                <input 
+                  type="range" min={clipping.axis === 'y' ? -5 : -25} max={clipping.axis === 'y' ? 15 : 25} step="0.1" value={clipping.distance} 
+                  onChange={(e) => setClipping({ distance: Number(e.target.value) })} 
+                  style={{ width: '100%', cursor: 'pointer', accentColor: '#4af626', height: '4px', opacity: clipping.enabled ? 1 : 0.3 }} disabled={!clipping.enabled}
+                />
+              </div>
+            )}
+
+            {/* PLACEHOLDERS */}
+            {activeTab === 'view' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>Camera & Render settings...</div>}
+            {activeTab === 'output' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>CSV/Export tools...</div>}
+            {activeTab === 'log' && <div style={{ color: dimCol, fontSize: '0.8rem', fontFamily: 'monospace' }}>&gt; System initialized...</div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+**C:\Projects\bimcube\src\components\layout\MainArea.jsx**
+```text
+import useStore from '../../core/store';
+import Viewport3D from './Viewport3D';
+
+export default function MainArea() {
+  const { mainViewMode, setMainViewMode, theme, toggleTheme } = useStore();
+  const isDark = theme === 'dark';
+
+  return (
+    <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      
+      {/* 🪄 FLOATING TOP RIGHT DROPDOWN */}
+      <div style={{ 
+        position: 'absolute', top: '16px', right: '16px', zIndex: 10,
+        display: 'flex', gap: '8px'
+      }}>
+        <button onClick={toggleTheme} style={{
+          background: isDark ? 'rgba(24,24,24,0.8)' : 'rgba(255,255,255,0.8)', border: `1px solid ${isDark ? '#333' : '#ccc'}`,
+          padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', backdropFilter: 'blur(8px)', color: isDark ? '#fff' : '#000'
+        }}>
+          {isDark ? '☀️' : '🌙'}
+        </button>
+
+        <select 
+          value={mainViewMode} 
+          onChange={(e) => setMainViewMode(e.target.value)}
+          style={{
+            background: isDark ? 'rgba(24,24,24,0.8)' : 'rgba(255,255,255,0.8)',
+            color: isDark ? '#fff' : '#000', border: `1px solid ${isDark ? '#333' : '#ccc'}`,
+            padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', outline: 'none',
+            backdropFilter: 'blur(8px)', fontWeight: 'bold', fontSize: '0.85rem'
+          }}
+        >
+          <option value="2D">📐 2D Plan</option>
+          <option value="3D">🧊 3D View</option>
+          <option value="CSV">📊 CSV Data</option>
+          <option value="Map">🗺️ Map Mode</option>
+          <option value="Render">📸 Render</option>
+        </select>
+      </div>
+
+      {/* Main Content Router */}
+      {mainViewMode === '3D' && <Viewport3D />}
+      {mainViewMode === 'CSV' && <div style={{ padding: '4rem', color: isDark?'#fff':'#000' }}>CSV View Placeholder</div>}
+      {mainViewMode === '2D' && <div style={{ padding: '4rem', color: isDark?'#fff':'#000' }}>2D View Placeholder</div>}
+    </div>
+  );
+}
+```
+
 **C:\Projects\bimcube\src\components\layout\MiddlePane.jsx**
 ```text
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useStore from '../../core/store';
 import Slider from '../ui/Slider';
 import ColorInput from '../ui/ColorInput';
@@ -197,8 +406,19 @@ const toolRegistry = {
 
 export default function MiddlePane() {
   const { activePluginId, pluginInputs, setInputValue, setPluginOutputs, clearActivePlugin, selectedObject, setSelectedObject, theme } = useStore();
+  
+  // 🪄 NEW: Mobile Detection State
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
   const activeTool = toolRegistry[activePluginId];
   const isDark = theme === 'dark';
+
+  // 🪄 NEW: Listen for screen size changes (Handy vs Desktop)
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (activeTool && pluginInputs[Object.keys(activeTool.manifest.inputs)[0]] !== undefined) {
@@ -213,10 +433,26 @@ export default function MiddlePane() {
   const dimCol = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
   const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
+  // 🪄 DYNAMIC DIMENSIONS: Shrink the panel on mobile!
+  const paneWidth = isMobile ? '160px' : '240px';
+  const panePadding = isMobile ? '0.8rem' : '1.2rem';
+
   return (
-    <div style={{ position: 'absolute', top: 0, left: '60px', bottom: 0, width: '240px', backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRight: `1px solid ${borderCol}`, padding: '1.2rem', display: 'flex', flexDirection: 'column', zIndex: 40, overflowY: 'auto', boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.3)' : '4px 0 24px rgba(0,0,0,0.05)' }}>
+    <div style={{ 
+      position: 'absolute', top: 0, left: '60px', bottom: 0, 
+      width: paneWidth, // Applies the dynamic width
+      padding: panePadding, // Applies the dynamic padding
+      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.75)', 
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', 
+      borderRight: `1px solid ${borderCol}`, 
+      display: 'flex', flexDirection: 'column', zIndex: 40, overflowY: 'auto', 
+      boxShadow: isDark ? '4px 0 24px rgba(0,0,0,0.3)' : '4px 0 24px rgba(0,0,0,0.05)',
+      transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease' // Smooth animation when rotating the phone!
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: `1px solid ${borderCol}`, paddingBottom: '0.5rem' }}>
-        <h3 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)' }}>{activeTool.manifest.name}</h3>
+        <h3 style={{ margin: 0, fontSize: isMobile ? '0.75rem' : '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)' }}>
+          {activeTool.manifest.name}
+        </h3>
       </div>
 
       {Object.entries(activeTool.manifest.inputs).map(([key, config]) => {
@@ -235,7 +471,7 @@ export default function MiddlePane() {
             <button onClick={() => setSelectedObject(null)} style={{ background: 'transparent', border: 'none', color: dimCol, cursor: 'pointer', fontSize: '1rem', padding: 0 }}>✕</button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.7rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Type:</span> <strong style={{ color: txtCol }}>{selectedObject.typeId}</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Level:</span> <strong style={{ color: txtCol }}>0{selectedObject.level}</strong></div>
             
@@ -256,7 +492,6 @@ export default function MiddlePane() {
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Height:</span> <strong style={{ color: txtCol }}>{selectedObject.height.toFixed(2)} m</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: dimCol }}>Thick/Depth:</span> <strong style={{ color: txtCol }}>{((selectedObject.depth || selectedObject.thickness) * 1000).toFixed(0)} mm</strong></div>
             
-            {/* 🪄 DISPLAY THE MATHEMATICAL TANGENT VECTOR! */}
             {selectedObject.dirX !== undefined && (
                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: `1px solid ${borderCol}` }}>
                  <span style={{ color: dimCol }}>Vector (XZ):</span> 
@@ -424,6 +659,52 @@ export default function RightPane() {
 }
 ```
 
+**C:\Projects\bimcube\src\components\layout\Sidebar.jsx**
+```text
+import useStore from '../../core/store';
+
+export default function Sidebar() {
+  const { activeTab, setActiveTab, theme } = useStore();
+  const isDark = theme === 'dark';
+
+  const icons = [
+    { id: 'inputs', icon: '🏢', title: 'Floorplan Grid' },
+    { id: 'layers', icon: '👁️', title: 'Layers & Visibility' },
+    { id: 'section', icon: '✂️', title: 'Sectioning' },
+    { id: 'view', icon: '🎥', title: 'View Controls' },
+    { id: 'log', icon: '📝', title: 'Log File' },
+    { id: 'output', icon: '📤', title: 'Outputs' },
+  ];
+
+  return (
+    <div style={{
+      width: '60px', height: '100%', zIndex: 50,
+      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+      backdropFilter: 'blur(12px)', borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '1rem'
+    }}>
+      <div style={{ fontWeight: '900', fontSize: '1.2rem', marginBottom: '2rem' }}>BC</div>
+      
+      {icons.map(item => {
+        const isActive = activeTab === item.id;
+        return (
+          <button 
+            key={item.id} title={item.title} onClick={() => setActiveTab(item.id)}
+            style={{
+              width: '44px', height: '44px', marginBottom: '8px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '1.2rem', transition: 'all 0.2s',
+              backgroundColor: isActive ? (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') : 'transparent',
+              boxShadow: isActive ? `inset 3px 0 0 0 ${isDark ? '#fff' : '#111'}` : 'none'
+            }}
+          >
+            {item.icon}
+          </button>
+        )
+      })}
+    </div>
+  );
+}
+```
+
 **C:\Projects\bimcube\src\components\layout\Viewport3D.jsx**
 ```text
 import { useEffect, useRef } from 'react';
@@ -435,19 +716,18 @@ import useStore from '../../core/store';
 export default function Viewport3D() {
   const mountRef = useRef(null);
   
-  // 🪄 Pull in the clipping state!
-  const { pluginOutputs, theme, visibility, selectedObject, setSelectedObject, clipping } = useStore(); 
+  const { pluginOutputs, theme, visibility, selectedObject, clipping } = useStore();
   
   const groupRef = useRef(null);
   const sceneRef = useRef(null);
   const gridHelperRef = useRef(null);
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
-  const rendererRef = useRef(null); // Save renderer to dynamically toggle clipping
+  const rendererRef = useRef(null); 
 
-  // 🪄 Create ONE persistent infinite math plane. (Starts facing down along Y-axis at 1.5m)
   const clipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5));
 
+  // Initialize Three.js Scene
   useEffect(() => {
     const currentMount = mountRef.current;
     if (!currentMount) return;
@@ -465,9 +745,9 @@ export default function Viewport3D() {
     camera.position.set(20, 15, 20);
     cameraRef.current = camera; 
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
-    renderer.localClippingEnabled = clipping.enabled; // Enable clipping engine!
+    renderer.localClippingEnabled = clipping.enabled; 
     rendererRef.current = renderer;
     currentMount.appendChild(renderer.domElement);
 
@@ -538,34 +818,31 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🪄 LIVE SECTIONING EFFECT (Runs every time you touch the slider, without rebuilding geometry!)
+  // Update Clipping Plane
   useEffect(() => {
     if (!rendererRef.current) return;
-    
     rendererRef.current.localClippingEnabled = clipping.enabled;
-
-    // Flip the infinite plane to match the chosen axis
-    if (clipping.axis === 'y') clipPlaneRef.current.normal.set(0, -1, 0); // Top Down
-    else if (clipping.axis === 'x') clipPlaneRef.current.normal.set(-1, 0, 0); // Side cut
-    else if (clipping.axis === 'z') clipPlaneRef.current.normal.set(0, 0, -1); // Front cut
-
-    // Move the plane!
+    if (clipping.axis === 'y') clipPlaneRef.current.normal.set(0, -1, 0); 
+    else if (clipping.axis === 'x') clipPlaneRef.current.normal.set(-1, 0, 0); 
+    else if (clipping.axis === 'z') clipPlaneRef.current.normal.set(0, 0, -1); 
     clipPlaneRef.current.constant = clipping.distance;
   }, [clipping]);
 
+  // Update Theme & Background
   useEffect(() => {
     if (!sceneRef.current) return;
-    sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#242424' : '#f5f5f5');
+    // We make background transparent to let MainArea's background show through!
+    sceneRef.current.background = null; 
     if (gridHelperRef.current) sceneRef.current.remove(gridHelperRef.current);
     
-    const mainColor = theme === 'dark' ? '#555555' : '#ffffff';
-    const subColor = theme === 'dark' ? '#444444' : '#e0e0e0';
+    const mainColor = theme === 'dark' ? '#555555' : '#bbbbbb';
+    const subColor = theme === 'dark' ? '#333333' : '#e0e0e0';
     const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
     gridHelperRef.current = gridHelper;
     sceneRef.current.add(gridHelper);
   }, [theme]);
 
-  // Geometry Generation
+  // Generate Geometry
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -573,8 +850,6 @@ export default function Viewport3D() {
 
     if (pluginOutputs.renderType === 'floorplan-grid') {
       const wireColor = theme === 'dark' ? '#ffffff' : '#000000';
-
-      // 🪄 Attach the math plane to EVERY material so it knows how to cut!
       const clipPlanes = [clipPlaneRef.current];
 
       if (pluginOutputs.coordinates) {
@@ -610,7 +885,10 @@ export default function Viewport3D() {
         pluginOutputs.walls.forEach((wall, index) => {
           if (visibility.levels[wall.level] && visibility.types[wall.typeId]) {
             const geom = new THREE.BoxGeometry(wall.length, wall.height, wall.thickness);
-            const mat = new THREE.MeshStandardMaterial({ color: wall.color, roughness: 0.8, clippingPlanes: clipPlanes });
+            const mat = new THREE.MeshStandardMaterial({ 
+              color: wall.color, roughness: wall.opacity < 1 ? 0.1 : 0.8, 
+              transparent: wall.opacity < 1, opacity: wall.opacity || 1, clippingPlanes: clipPlanes 
+            });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(wall.x, wall.y, wall.z);
             mesh.rotation.y = wall.rotationY; 
@@ -643,7 +921,7 @@ export default function Viewport3D() {
         });
       }
     }
-  }, [pluginOutputs, theme, visibility]); 
+  }, [pluginOutputs, theme, visibility]);
 
   // Highlighter Logic
   useEffect(() => {
@@ -695,12 +973,10 @@ export default function Viewport3D() {
     const distance = maxDim * 1.5;
 
     controlsRef.current.target.copy(center);
-
     if (viewType === 'top') cameraRef.current.position.set(center.x, center.y + distance, center.z + 0.1); 
     if (viewType === 'front') cameraRef.current.position.set(center.x, center.y, center.z + distance);
     if (viewType === 'left') cameraRef.current.position.set(center.x - distance, center.y, center.z);
     if (viewType === 'iso') cameraRef.current.position.set(center.x + distance, center.y + distance, center.z + distance);
-    
     cameraRef.current.updateProjectionMatrix();
   };
 
@@ -807,21 +1083,26 @@ export default function Slider({ label, min, max, step, value, onChange }) {
 import { create } from 'zustand';
 
 const useStore = create((set) => ({
+  // UI Layout State
+  activeTab: 'inputs', // 'inputs', 'layers', 'section', 'view', 'log', 'output'
+  isLeftPanelOpen: true,
+  mainViewMode: '3D', // '2D', '3D', 'CSV', 'Map', 'Render'
+  
+  setActiveTab: (tab) => set({ activeTab: tab, isLeftPanelOpen: true }),
+  toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
+  setMainViewMode: (mode) => set({ mainViewMode: mode }),
+
+  // Plugin & Generation State
   activePluginId: null,
   pluginInputs: {},   
   pluginOutputs: {},  
   theme: 'dark', 
   
-  visibility: {
-    levels: {},
-    types: {}
-  },
-
+  visibility: { levels: {}, types: {} },
   selectedObject: null,
-  setSelectedObject: (objData) => set(() => ({ selectedObject: objData })),
+  setSelectedObject: (objData) => set({ selectedObject: objData, isLeftPanelOpen: true }), // Auto-open panel on select
 
-  // 🪄 NEW: LIVE GPU SECTIONING STATE
-  clipping: { enabled: false, axis: 'y', distance: 1.5 }, // 1.5m is a standard architectural floorplan cut height
+  clipping: { enabled: false, axis: 'y', distance: 1.5 },
   setClipping: (updates) => set((state) => ({ clipping: { ...state.clipping, ...updates } })),
 
   toggleLevel: (levelStr) => set((state) => ({
@@ -853,10 +1134,10 @@ const useStore = create((set) => ({
        data.meta.types.forEach(type => { if (newTypes[type] === undefined) newTypes[type] = type === 'Grid' ? false : true; });
     }
 
-    return { pluginOutputs: data, visibility: { levels: newLevels, types: newTypes }, selectedObject: null };
+    return { pluginOutputs: data, visibility: { levels: newLevels, types: newTypes } };
   }),
   
-  clearActivePlugin: () => set(() => ({ activePluginId: null, selectedObject: null }))
+  clearActivePlugin: () => set({ activePluginId: null, selectedObject: null })
 }));
 
 export default useStore;
@@ -900,9 +1181,16 @@ export function compute(inputs) {
 import blueprint from './blueprint.json';
 
 export function compute(inputs) {
-    const { widthX, depthY, h00, h01, h02 } = inputs;
+    const { widthX, depthY, storeyCount, hGround, hTypical, hParapet, hWindow, wPilaster } = inputs;
     
-    const zLevels = [ 0, h00, h00 + h01, h00 + h01 + h02 ];
+    // 🪄 DYNAMIC Z-LEVEL GENERATOR
+    const zLevels = [0, hGround];
+    let currentZ = hGround;
+    for (let i = 0; i < storeyCount; i++) {
+        currentZ += hTypical;
+        zLevels.push(currentZ); 
+    }
+    const roofLevelIndex = storeyCount + 1;
     
     const halfX = widthX / 2;
     const E = halfX - 1.35;
@@ -938,7 +1226,45 @@ export function compute(inputs) {
         }
     });
 
-    const generatedSlabs = (blueprint.slabs || []).map(slabDef => {
+    // 🪄 TEMPLATE CLONING ENGINE
+    const expandBlueprint = (arr) => {
+        const expanded = [];
+        (arr || []).forEach(item => {
+            const ref = item.p1 || item.gridStart;
+            if (!ref) { expanded.push(item); return; } // Pass through Facades
+            
+            if (ref.startsWith('Z0-')) {
+                expanded.push(item);
+            } else if (ref.startsWith('ZR-')) {
+                const newLvl = `Z${roofLevelIndex}-`;
+                expanded.push({
+                    ...item,
+                    p1: item.p1 ? item.p1.replace('ZR-', newLvl) : undefined,
+                    p2: item.p2 ? item.p2.replace('ZR-', newLvl) : undefined,
+                    gridStart: item.gridStart ? item.gridStart.replace('ZR-', newLvl) : undefined,
+                    gridEnd: item.gridEnd ? item.gridEnd.replace('ZR-', newLvl) : undefined
+                });
+            } else if (ref.startsWith('Z1-')) {
+                for (let lvl = 1; lvl <= storeyCount; lvl++) {
+                    const newLvl = `Z${lvl}-`;
+                    expanded.push({
+                        ...item,
+                        p1: item.p1 ? item.p1.replace('Z1-', newLvl) : undefined,
+                        p2: item.p2 ? item.p2.replace('Z1-', newLvl) : undefined,
+                        gridStart: item.gridStart ? item.gridStart.replace('Z1-', newLvl) : undefined,
+                        gridEnd: item.gridEnd ? item.gridEnd.replace('Z1-', newLvl) : undefined
+                    });
+                }
+            }
+        });
+        return expanded;
+    };
+
+    const expandedSlabs = expandBlueprint(blueprint.slabs);
+    const expandedWalls = expandBlueprint(blueprint.walls);
+    const expandedOpenings = expandBlueprint(blueprint.openings);
+
+    const generatedSlabs = expandedSlabs.map(slabDef => {
         const p1 = pointMap[slabDef.p1];
         const p2 = pointMap[slabDef.p2];
         const mat = blueprint.materialTypes[slabDef.mat];
@@ -955,7 +1281,7 @@ export function compute(inputs) {
         return { width: Math.abs(p2.x - p1.x), depth: Math.abs(p2.z - p1.z), height: mat.thickness, x: midX, y: midY, z: midZ, color: mat.color, level: storeyIdx, typeId: slabDef.mat };
     }).filter(Boolean);
 
-    const rawWalls = (blueprint.walls || []).map((wallDef, index) => {
+    const rawWalls = expandedWalls.map((wallDef, index) => {
         const p1 = pointMap[wallDef.p1];
         const p2 = pointMap[wallDef.p2];
         const mat = blueprint.materialTypes[wallDef.mat];
@@ -968,13 +1294,12 @@ export function compute(inputs) {
         const p2X = p2.x + (wallDef.offsetP2?.x || 0);
         const p2Z = p2.z + (wallDef.offsetP2?.z || 0);
 
-        const currentFloorHeight = mat.fixedHeight !== undefined 
-            ? mat.fixedHeight 
-            : (zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : 3.0 - 0.42); 
+        let currentFloorHeight = zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : hParapet; 
+        if (mat.type === 'parapet') currentFloorHeight = hParapet; // Link to slider!
 
         const dx = p2X - p1X;
         const dz = p2Z - p1Z;
-        const length = Math.sqrt((dx * dx) + (dz * dz)); 
+        const length = Math.hypot(dx, dz); 
         const dirX = dx / length;
         const dirZ = dz / length;
 
@@ -1051,11 +1376,14 @@ export function compute(inputs) {
         };
     });
 
-    // 🪄 STEP 1: GENERATE WINDOWS FIRST!
-    const generatedOpenings = (blueprint.openings || []).map((openingDef, index) => {
+    const generatedOpenings = expandedOpenings.map((openingDef, index) => {
         const p1 = pointMap[openingDef.gridStart];
         const p2 = pointMap[openingDef.gridEnd];
-        const opType = blueprint.openingTypes[openingDef.type];
+        
+        // 🪄 LINKING WINDOW HEIGHT SLIDER
+        const opType = { ...blueprint.openingTypes[openingDef.type] };
+        if (openingDef.type.startsWith('OW')) opType.height = hWindow; 
+        
         if (!p1 || !p2 || !opType) return null;
 
         const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
@@ -1069,7 +1397,7 @@ export function compute(inputs) {
             if (w.level !== storeyIdx) return false;
             const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
             const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
-            return Math.abs((d1 + d2) - w.length) < 0.5; // Very safe tolerance
+            return Math.abs((d1 + d2) - w.length) < 0.5; 
         });
 
         const hostWall = hostRawWall ? generatedWalls.find(w => w.id === hostRawWall.id) : null;
@@ -1094,7 +1422,7 @@ export function compute(inputs) {
         };
     }).filter(Boolean);
 
-    // 🪄 STEP 2: GENERATE FACADES (Using the openings to map gaps!)
+    // 🪄 SMART PROCEDURAL FACADE ARRAYS
     const generatedFacades = [];
     (blueprint.facades || []).forEach((facadeDef, fIndex) => {
         const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
@@ -1152,7 +1480,7 @@ export function compute(inputs) {
         };
 
         if (facadeDef.mat === 'CW2') {
-            const topLevel = zLevels[3] + 0.8;
+            const topLevel = zLevels[roofLevelIndex] + hParapet;
             generatedFacades.push({ 
                 id: `CW2-${fIndex}`, length: finalLength, height: topLevel, thickness: mat.thickness, 
                 x: (finalP1X + finalP2X) / 2, y: topLevel / 2, z: (finalP1Z + finalP2Z) / 2, 
@@ -1162,25 +1490,26 @@ export function compute(inputs) {
         }
 
         if (facadeDef.mat === 'CW1') {
-            generatePanels('L0-Glass', 0, finalLength, 0, 2.4, 2.4, '#e0f7fa', 0.3, 0);
-            generatePanels('L0-Span', 0, finalLength, 2.4, zLevels[1], 2.4, mat.color, 1, 0);
+            
+            // 🪄 EXACT ARCHITECTURAL SPANDREL MATH
+            const hSpandrel = hTypical - hWindow;
+            const groundGlassHeight = hGround - hSpandrel;
 
-            [1, 2].forEach(lvl => {
+            // Level 0: Ground Floor
+            generatePanels('L0-Glass', 0, finalLength, 0, groundGlassHeight, 2.4, '#e0f7fa', 0.3, 0);
+            generatePanels('L0-Span', 0, finalLength, groundGlassHeight, zLevels[1], 2.4, mat.color, 1, 0);
+
+            // Level 1 to StoreyCount: Typical Floors
+            for (let lvl = 1; lvl <= storeyCount; lvl++) {
                 const floorBase = zLevels[lvl];
-                const windowTop = floorBase + 2.4; 
-                
-                // 🪄 FIX 2: Level 2 Spandrel merges completely with the Parapet!
-                const nextFloorBase = (lvl === 2) ? (zLevels[3] + 0.8) : zLevels[lvl+1]; 
+                const windowTop = floorBase + hWindow; 
+                const nextFloorBase = zLevels[lvl+1]; 
 
-                // 🪄 FIX 1: Filter windows dynamically and calculate negative space array gaps!
                 const floorOpenings = generatedOpenings.filter(op => {
                     if (op.level !== lvl) return false;
-                    
-                    // Check if opening sits on this un-offset facade line (0.5m tolerance is perfectly safe)
                     const opD1 = Math.hypot(op.x - p1.x, op.z - p1.z);
                     const opD2 = Math.hypot(op.x - p2.x, op.z - p2.z);
                     if (Math.abs((opD1 + opD2) - rawLen) > 0.5) return false;
-                    
                     op.facadeD1 = opD1 + ext; 
                     return true;
                 }).map(op => ({
@@ -1188,28 +1517,29 @@ export function compute(inputs) {
                     end: Math.min(finalLength, op.facadeD1 + (op.width / 2))
                 })).sort((a, b) => a.start - b.start);
 
-                // Array count = window count + 1!
                 let currentD = 0;
                 floorOpenings.forEach(op => {
                     if (op.start > currentD) {
-                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                        // Pilasters link to wPilaster slider!
+                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
                     }
                     currentD = Math.max(currentD, op.end);
                 });
-                
-                // Fill the final gap to the edge of the facade
                 if (currentD < finalLength) {
-                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, 0.8, mat.color, 1, lvl);
+                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
                 }
 
-                // Continuous horizontal spandrel above the windows
                 generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, 2.4, mat.color, 1, lvl);
-            });
+            }
+
+            // Level Roof: Parapet Band
+            const roofBase = zLevels[roofLevelIndex];
+            generatePanels('LR-Parapet', 0, finalLength, roofBase, roofBase + hParapet, 2.4, mat.color, 1, roofLevelIndex);
         }
     });
 
     return {
-        description: `Constructable BIM with Arrayed Panel Facades`,
+        description: `Parametric ${storeyCount + 2}-Storey Highrise Engine`,
         renderType: 'floorplan-grid', 
         dimensions: { widthX, depthY },
         meta: { levels: Array.from(uniqueLevels).sort(), types: Array.from(uniqueTypes).sort(), colors: typeColors },
@@ -1226,7 +1556,7 @@ export function compute(inputs) {
   "materialTypes": {
     "WE1": { "priority": 1, "thickness": 0.46, "color": "#d32f2f", "type": "exterior" },
     "WE2": { "priority": 2, "thickness": 0.42, "color": "#f57c00", "type": "exterior" },
-    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0, "fixedHeight": 0.5 },
+    "WE3": { "priority": 6, "thickness": 0.45, "color": "#455a64", "type": "parapet", "zOffsetBottom": 0 },
     "WI1": { "priority": 3, "thickness": 0.40, "color": "#9e9e9e", "type": "concrete_core" },
     "WI2": { "priority": 4, "thickness": 0.42, "color": "#795548", "type": "timber_loadbearing" },
     "WI3": { "priority": 5, "thickness": 0.10, "color": "#eeeeee", "type": "drywall" },
@@ -1246,7 +1576,6 @@ export function compute(inputs) {
   },
   "slabs": [
     { "p1": "Z0-A0", "p2": "Z0-I8", "mat": "SF1" },
-    
     { "p1": "Z1-A0", "p2": "Z1-C8", "mat": "SL1" }, { "p1": "Z1-C0", "p2": "Z1-D3", "mat": "SL1" },
     { "p1": "Z1-C5", "p2": "Z1-D8", "mat": "SL1" }, { "p1": "Z1-D0", "p2": "Z1-F1", "mat": "SL1" },
     { "p1": "Z1-D7", "p2": "Z1-F8", "mat": "SL1" }, { "p1": "Z1-F0", "p2": "Z1-G3", "mat": "SL1" },
@@ -1254,16 +1583,7 @@ export function compute(inputs) {
     { "p1": "Z1-C3", "p2": "Z1-G5", "mat": "WI1" },
     { "p1": "Z1-D5", "p2": "Z1-D6", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F7", "mat": "ST1" }, { "p1": "Z1-D6", "p2": "Z1-F5", "mat": "ST1" },
     { "p1": "Z1-F2", "p2": "Z1-G8", "mat": "SL1" }, 
-
-    { "p1": "Z2-A0", "p2": "Z2-C8", "mat": "SL1" }, { "p1": "Z2-C0", "p2": "Z2-D3", "mat": "SL1" },
-    { "p1": "Z2-C5", "p2": "Z2-D8", "mat": "SL1" }, { "p1": "Z2-D0", "p2": "Z2-F1", "mat": "SL1" },
-    { "p1": "Z2-D7", "p2": "Z2-F8", "mat": "SL1" }, { "p1": "Z2-F0", "p2": "Z2-G3", "mat": "SL1" },
-    { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "SL1" }, { "p1": "Z2-G0", "p2": "Z2-I8", "mat": "SL1" },
-    { "p1": "Z2-C3", "p2": "Z2-G5", "mat": "WI1" },
-    { "p1": "Z2-D5", "p2": "Z2-D6", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F7", "mat": "ST1" }, { "p1": "Z2-D6", "p2": "Z2-F5", "mat": "ST1" },
-    { "p1": "Z2-F2", "p2": "Z2-G8", "mat": "SL1" }, 
-
-    { "p1": "Z3-A0", "p2": "Z3-I8", "mat": "SR1" }
+    { "p1": "ZR-A0", "p2": "ZR-I8", "mat": "SR1" }
   ],
   "walls": [
     { "p1": "Z0-A0", "p2": "Z0-A8", "mat": "WE1" }, { "p1": "Z0-I8", "p2": "Z0-I0", "mat": "WE1" },
@@ -1308,39 +1628,8 @@ export function compute(inputs) {
     { "p1": "Z1-I6", "p2": "Z1-H6", "mat": "WI3" }, { "p1": "Z1-H4", "p2": "Z1-H8", "mat": "WI3" },
     { "p1": "Z1-H4", "p2": "Z1-I4", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
 
-    { "p1": "Z2-A0", "p2": "Z2-A8", "mat": "WE1" }, { "p1": "Z2-I8", "p2": "Z2-I0", "mat": "WE1" },
-    { "p1": "Z2-A8", "p2": "Z2-I8", "mat": "WE2" }, { "p1": "Z2-I0", "p2": "Z2-A0", "mat": "WE2" },
-    { "p1": "Z2-A4", "p2": "Z2-C4", "mat": "WI2" }, { "p1": "Z2-G4", "p2": "Z2-I4", "mat": "WI2" },
-    { "p1": "Z2-E0", "p2": "Z2-E1", "mat": "WI2" }, { "p1": "Z2-E7", "p2": "Z2-E8", "mat": "WI2" },
-    { "p1": "Z2-C3", "p2": "Z2-C5", "mat": "WI1" }, { "p1": "Z2-C5", "p2": "Z2-D5", "mat": "WI1" },
-    { "p1": "Z2-D5", "p2": "Z2-D7", "mat": "WI1" }, { "p1": "Z2-D7", "p2": "Z2-F7", "mat": "WI1" },
-    { "p1": "Z2-F7", "p2": "Z2-F5", "mat": "WI1" }, { "p1": "Z2-F5", "p2": "Z2-G5", "mat": "WI1" },
-    { "p1": "Z2-G5", "p2": "Z2-G3", "mat": "WI1" }, { "p1": "Z2-G3", "p2": "Z2-F3", "mat": "WI1" },
-    { "p1": "Z2-F3", "p2": "Z2-F1", "mat": "WI1" }, { "p1": "Z2-F1", "p2": "Z2-D1", "mat": "WI1" },
-    { "p1": "Z2-D1", "p2": "Z2-D3", "mat": "WI1" }, { "p1": "Z2-E3", "p2": "Z2-C3", "mat": "WI1" },
-    { "p1": "Z2-A2", "p2": "Z2-B2", "mat": "WI3" }, { "p1": "Z2-B2", "p2": "Z2-B4", "mat": "WI3" },
-    { "p1": "Z2-B2", "p2": "Z2-A2", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
-    { "p1": "Z2-B4", "p2": "Z2-B6", "mat": "WI3" }, { "p1": "Z2-B6", "p2": "Z2-A6", "mat": "WI3" },
-    { "p1": "Z2-B6", "p2": "Z2-A6", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
-    { "p1": "Z2-C0", "p2": "Z2-C2", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
-    { "p1": "Z2-C2", "p2": "Z2-D2", "mat": "WI3", "offsetP1": {"x": -0.4} },
-    { "p1": "Z2-C6", "p2": "Z2-C8", "mat": "WI3", "offsetP1": {"x": -0.4}, "offsetP2": {"x": -0.4} },
-    { "p1": "Z2-C6", "p2": "Z2-D6", "mat": "WI3", "offsetP1": {"x": -0.4} },
-    { "p1": "Z2-G0", "p2": "Z2-G3", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
-    { "p1": "Z2-G1", "p2": "Z2-F1", "mat": "WI3", "offsetP1": {"x": -0.5} },
-    { "p1": "Z2-G5", "p2": "Z2-G8", "mat": "WI3", "offsetP1": {"x": -0.5}, "offsetP2": {"x": -0.5} },
-    { "p1": "Z2-G7", "p2": "Z2-F7", "mat": "WI3", "offsetP1": {"x": -0.5} },
-    { "p1": "Z2-H1", "p2": "Z2-H1", "mat": "WI3", "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-H1", "p2": "Z2-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-H7", "p2": "Z2-H7", "mat": "WI3", "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-H7", "p2": "Z2-H4", "mat": "WI3", "offsetP1": {"x": -1.2}, "offsetP2": {"x": -1.2} },
-    { "p1": "Z2-I2", "p2": "Z2-H2", "mat": "WI3" }, { "p1": "Z2-H0", "p2": "Z2-H4", "mat": "WI3" },
-    { "p1": "Z2-H4", "p2": "Z2-I4", "mat": "WI3", "offsetP1": {"z": -0.5}, "offsetP2": {"z": -0.5} },
-    { "p1": "Z2-I6", "p2": "Z2-H6", "mat": "WI3" }, { "p1": "Z2-H4", "p2": "Z2-H8", "mat": "WI3" },
-    { "p1": "Z2-H4", "p2": "Z2-I4", "mat": "WI3", "offsetP1": {"z": 0.5}, "offsetP2": {"z": 0.5} },
-
-    { "p1": "Z3-A0", "p2": "Z3-A8", "mat": "WE3" }, { "p1": "Z3-A8", "p2": "Z3-I8", "mat": "WE3" },
-    { "p1": "Z3-I8", "p2": "Z3-I0", "mat": "WE3" }, { "p1": "Z3-I0", "p2": "Z3-A0", "mat": "WE3" }
+    { "p1": "ZR-A0", "p2": "ZR-A8", "mat": "WE3" }, { "p1": "ZR-A8", "p2": "ZR-I8", "mat": "WE3" },
+    { "p1": "ZR-I8", "p2": "ZR-I0", "mat": "WE3" }, { "p1": "ZR-I0", "p2": "ZR-A0", "mat": "WE3" }
   ],
   "openings": [
     { "gridStart": "Z0-C0", "gridEnd": "Z0-E0", "type": "OD1" },
@@ -1356,20 +1645,7 @@ export function compute(inputs) {
     { "gridStart": "Z1-C8", "gridEnd": "Z1-E8", "type": "OW1" }, { "gridStart": "Z1-E8", "gridEnd": "Z1-G8", "type": "OW1" },
     { "gridStart": "Z1-A0", "gridEnd": "Z1-C0", "type": "OW2" }, { "gridStart": "Z1-G0", "gridEnd": "Z1-H0", "type": "OW2" },
     { "gridStart": "Z1-A8", "gridEnd": "Z1-C8", "type": "OW2" }, { "gridStart": "Z1-G8", "gridEnd": "Z1-H8", "type": "OW2" },
-    { "gridStart": "Z1-H0", "gridEnd": "Z1-I0", "type": "OW1" }, { "gridStart": "Z1-H8", "gridEnd": "Z1-I8", "type": "OW1" },
-
-    { "gridStart": "Z2-C3", "gridEnd": "Z2-D3", "type": "OD2" }, { "gridStart": "Z2-C5", "gridEnd": "Z2-D5", "type": "OD2" },
-    { "gridStart": "Z2-F3", "gridEnd": "Z2-G3", "type": "OD2" }, { "gridStart": "Z2-F5", "gridEnd": "Z2-G5", "type": "OD2" },
-    { "gridStart": "Z2-C2", "gridEnd": "Z2-D2", "type": "OD3" }, { "gridStart": "Z2-C6", "gridEnd": "Z2-D6", "type": "OD3" },
-    { "gridStart": "Z2-B2", "gridEnd": "Z2-B4", "type": "OD3" }, { "gridStart": "Z2-B4", "gridEnd": "Z2-B6", "type": "OD3" },
-    { "gridStart": "Z2-F1", "gridEnd": "Z2-G1", "type": "OD3" }, { "gridStart": "Z2-F7", "gridEnd": "Z2-G7", "type": "OD3" },
-    { "gridStart": "Z2-H1", "gridEnd": "Z2-H2", "type": "OD3" }, { "gridStart": "Z2-H6", "gridEnd": "Z2-H7", "type": "OD3" },
-    { "gridStart": "Z2-H2", "gridEnd": "Z2-H4", "type": "OD3" }, { "gridStart": "Z2-H4", "gridEnd": "Z2-H6", "type": "OD3" },
-    { "gridStart": "Z2-C0", "gridEnd": "Z2-E0", "type": "OW1" }, { "gridStart": "Z2-E0", "gridEnd": "Z2-G0", "type": "OW1" },
-    { "gridStart": "Z2-C8", "gridEnd": "Z2-E8", "type": "OW1" }, { "gridStart": "Z2-E8", "gridEnd": "Z2-G8", "type": "OW1" },
-    { "gridStart": "Z2-A0", "gridEnd": "Z2-C0", "type": "OW2" }, { "gridStart": "Z2-G0", "gridEnd": "Z2-H0", "type": "OW2" },
-    { "gridStart": "Z2-A8", "gridEnd": "Z2-C8", "type": "OW2" }, { "gridStart": "Z2-G8", "gridEnd": "Z2-H8", "type": "OW2" },
-    { "gridStart": "Z2-H0", "gridEnd": "Z2-I0", "type": "OW1" }, { "gridStart": "Z2-H8", "gridEnd": "Z2-I8", "type": "OW1" }
+    { "gridStart": "Z1-H0", "gridEnd": "Z1-I0", "type": "OW1" }, { "gridStart": "Z1-H8", "gridEnd": "Z1-I8", "type": "OW1" }
   ],
   "facades": [
     { "gridStart": "A0", "gridEnd": "A8", "mat": "CW2", "offsetX": -0.255 },
@@ -1385,17 +1661,20 @@ export function compute(inputs) {
 {
   "id": "floorplan-grid",
   "name": "Floorplan Grid",
-  "version": "1.1.0",
-  "description": "Multi-storey parametric grid with cumulative Z-heights.",
+  "version": "2.0.0",
+  "description": "Procedural Multi-Storey BIM Generator.",
   "inputs": {
-    "widthX": { "type": "range", "label": "Width (X)", "min": 22, "max": 28, "step": 0.5, "defaultValue": 22 },
-    "depthY": { "type": "range", "label": "Depth (Y)", "min": 16, "max": 19, "step": 0.5, "defaultValue": 16 },
-    "h00": { "type": "number", "label": "Level 00 Room Height", "defaultValue": 3.22 },
-    "h01": { "type": "number", "label": "Level 01 Room Height", "defaultValue": 3.22 },
-    "h02": { "type": "number", "label": "Level 02 Room Height", "defaultValue": 3.22 }
+    "widthX": { "type": "range", "label": "Width (X)", "min": 21.5, "max": 28, "step": 0.5, "defaultValue": 22 },
+    "depthY": { "type": "range", "label": "Depth (Y)", "min": 15, "max": 19, "step": 0.5, "defaultValue": 16 },
+    "storeyCount": { "type": "range", "label": "Typical Stories", "min": 1, "max": 8, "step": 1, "defaultValue": 3 },
+    "hGround": { "type": "range", "label": "Ground Height", "min": 3.2, "max": 6.0, "step": 0.1, "defaultValue": 3.6 },
+    "hTypical": { "type": "range", "label": "Typical Height", "min": 3.0, "max": 4.2, "step": 0.1, "defaultValue": 3.2 },
+    "hWindow": { "type": "range", "label": "Window Height", "min": 2.1, "max": 3.6, "step": 0.1, "defaultValue": 2.4 },
+    "wPilaster": { "type": "range", "label": "Vertical Panel Width", "min": 0.4, "max": 5.0, "step": 0.1, "defaultValue": 0.8 },
+    "hParapet": { "type": "range", "label": "Parapet Height", "min": 0.4, "max": 1.2, "step": 0.1, "defaultValue": 0.8 }
   },
   "outputs": {
-    "description": "Annotated 3D coordinates"
+    "description": "Parametric Highrise Generation"
   }
 }
 ```

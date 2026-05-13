@@ -1,9 +1,14 @@
 import blueprint from './blueprint.json';
 
 export function compute(inputs) {
-    const { widthX, depthY, storeyCount, hGround, hTypical, hParapet, hWindow, wPilaster } = inputs;
+    const { 
+        widthX, depthY, storeyCount, hGround, hTypical, hParapet, 
+        colorCW1, colorCW2, colorGlass, alignType, wPanelGround, wPanelV, wPanelH 
+    } = inputs;
     
-    // 🪄 DYNAMIC Z-LEVEL GENERATOR
+    const activeGlassColor = colorGlass || "#8ab4f8";
+    const hWindow = Math.min(inputs.hWindow || 2.4, hTypical - 0.2);
+    
     const zLevels = [0, hGround];
     let currentZ = hGround;
     for (let i = 0; i < storeyCount; i++) {
@@ -46,12 +51,11 @@ export function compute(inputs) {
         }
     });
 
-    // 🪄 TEMPLATE CLONING ENGINE
     const expandBlueprint = (arr) => {
         const expanded = [];
         (arr || []).forEach(item => {
             const ref = item.p1 || item.gridStart;
-            if (!ref) { expanded.push(item); return; } // Pass through Facades
+            if (!ref) { expanded.push(item); return; } 
             
             if (ref.startsWith('Z0-')) {
                 expanded.push(item);
@@ -115,7 +119,7 @@ export function compute(inputs) {
         const p2Z = p2.z + (wallDef.offsetP2?.z || 0);
 
         let currentFloorHeight = zLevels[storeyIdx + 1] ? zLevels[storeyIdx + 1] - zLevels[storeyIdx] - 0.42 : hParapet; 
-        if (mat.type === 'parapet') currentFloorHeight = hParapet; // Link to slider!
+        if (mat.type === 'parapet') currentFloorHeight = hParapet;
 
         const dx = p2X - p1X;
         const dz = p2Z - p1Z;
@@ -164,7 +168,75 @@ export function compute(inputs) {
         return wallA.isHorizontal; 
     };
 
-    const generatedWalls = rawWalls.map(wall => {
+    // 🪄 UPGRADED OPENING GENERATOR: Dot-Product checking and Structural Binding
+    const generatedOpenings = expandedOpenings.map((openingDef, index) => {
+        const p1 = pointMap[openingDef.gridStart];
+        const p2 = pointMap[openingDef.gridEnd];
+        
+        const opType = { ...blueprint.openingTypes[openingDef.type] };
+        
+        if (openingDef.type.startsWith('OW')) {
+            opType.height = hWindow; 
+            opType.color = activeGlassColor; 
+            opType.opacity = 0.65;
+        }
+        
+        if (!p1 || !p2 || !opType) return null;
+
+        const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
+        const midX = (p1.x + p2.x) / 2;
+        const midZ = (p1.z + p2.z) / 2;
+
+        // Vector of the opening itself
+        const oDx = p2.x - p1.x;
+        const oDz = p2.z - p1.z;
+        const oLen = Math.hypot(oDx, oDz);
+        const oDirX = oLen > 0.001 ? oDx / oLen : 0;
+        const oDirZ = oLen > 0.001 ? oDz / oLen : 0;
+
+        uniqueTypes.add(openingDef.type);
+        typeColors[openingDef.type] = opType.color;
+
+        const hostRawWall = rawWalls.find(w => {
+            if (w.level !== storeyIdx) return false;
+            const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
+            const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
+            if (Math.abs((d1 + d2) - w.length) > 0.5) return false; 
+            
+            // 🪄 THE FIX: Ensure the wall vector perfectly aligns with the opening vector!
+            if (oLen > 0.1) {
+                const dot = Math.abs(oDirX * w.dirX + oDirZ * w.dirZ);
+                if (dot < 0.5) return false; // This is a perpendicular intersection wall, reject it!
+            }
+            return true;
+        });
+
+        const hostWall = hostRawWall ? hostRawWall : null; 
+        let rotationY = 0, tangentX = 0, tangentZ = 0, thickness = 0.05, baseLevel = p1.y;
+
+        if (hostWall) {
+            rotationY = -Math.atan2(hostWall.dz, hostWall.dx); 
+            tangentX = hostWall.dirX; 
+            tangentZ = hostWall.dirZ;
+            baseLevel = hostWall.baseLevel;
+        } else {
+            tangentX = oDirX; tangentZ = oDirZ;
+            rotationY = -Math.atan2(oDz, oDx);
+        }
+
+        return {
+            id: `O${index}`, 
+            hostWallId: hostWall ? hostWall.id : null, // 🪄 STRUCTURAL BINDING: Save exact wall ID!
+            width: opType.width, height: opType.height, depth: thickness, // Sleek 50mm panes
+            x: midX, y: baseLevel + opType.sill + (opType.height / 2), z: midZ, 
+            rotationY, dirX: tangentX, dirZ: tangentZ, 
+            color: opType.color, opacity: opType.opacity, level: storeyIdx, typeId: openingDef.type, category: opType.category
+        };
+    }).filter(Boolean);
+
+    const generatedWalls = [];
+    
+    rawWalls.forEach(wall => {
         let p1Ext = 0, p2Ext = 0;
         
         const p1Comp = nodeConnections[wall.p1Id].filter(w => w.id !== wall.id);
@@ -184,71 +256,67 @@ export function compute(inputs) {
         const finalLen = wall.length + p1Ext + p2Ext;
         const newP1X = wall.p1X - (wall.dirX * p1Ext);
         const newP1Z = wall.p1Z - (wall.dirZ * p1Ext);
-        const newP2X = wall.p2X + (wall.dirX * p2Ext);
-        const newP2Z = wall.p2Z + (wall.dirZ * p2Ext);
         const topLvl = wall.baseLevel + wall.currentFloorHeight + (wall.mat.zOffsetTop || 0);
 
-        return { 
-            id: wall.id, length: finalLen, height: topLvl - wall.baseLevel, thickness: wall.mat.thickness, 
-            x: (newP1X + newP2X) / 2, y: wall.baseLevel + ((topLvl - wall.baseLevel) / 2), z: (newP1Z + newP2Z) / 2, 
-            rotationY: -Math.atan2(wall.dz, wall.dx), dirX: wall.dirX, dirZ: wall.dirZ, 
-            color: wall.mat.color, level: wall.level, typeId: wall.typeId, baseLevel: wall.baseLevel
+        // 🪄 ULTIMATE SUB-MESHING OPTIMIZATION: Only grab openings expressly bound to this wall!
+        const wallOpenings = generatedOpenings.filter(op => op.hostWallId === wall.id).map(op => {
+            const opD1 = Math.hypot(op.x - wall.p1X, op.z - wall.p1Z);
+            const wall1D = opD1 + p1Ext; 
+            return {
+                ...op,
+                wall1D,
+                start: Math.max(0, wall1D - (op.width / 2)),
+                end: Math.min(finalLen, wall1D + (op.width / 2)) 
+            };
+        }).sort((a, b) => a.start - b.start);
+
+        const generateSubWall = (subName, dStart, dEnd, yBase, h) => {
+            const wLen = dEnd - dStart;
+            if (wLen <= 0.01 || h <= 0.01) return; 
+            
+            const cx = newP1X + wall.dirX * (dStart + wLen / 2);
+            const cz = newP1Z + wall.dirZ * (dStart + wLen / 2);
+            
+            generatedWalls.push({
+                id: `${wall.id}-${subName}`, length: wLen, height: h, thickness: wall.mat.thickness,
+                x: cx, y: yBase + (h / 2), z: cz,
+                rotationY: -Math.atan2(wall.dz, wall.dx), dirX: wall.dirX, dirZ: wall.dirZ,
+                color: wall.mat.color, level: wall.level, typeId: wall.typeId, baseLevel: wall.baseLevel
+            });
         };
-    });
 
-    const generatedOpenings = expandedOpenings.map((openingDef, index) => {
-        const p1 = pointMap[openingDef.gridStart];
-        const p2 = pointMap[openingDef.gridEnd];
-        
-        // 🪄 LINKING WINDOW HEIGHT SLIDER
-        const opType = { ...blueprint.openingTypes[openingDef.type] };
-        if (openingDef.type.startsWith('OW')) opType.height = hWindow; 
-        
-        if (!p1 || !p2 || !opType) return null;
-
-        const storeyIdx = parseInt(openingDef.gridStart.split('-')[0].substring(1));
-        const midX = (p1.x + p2.x) / 2;
-        const midZ = (p1.z + p2.z) / 2;
-
-        uniqueTypes.add(openingDef.type);
-        typeColors[openingDef.type] = opType.color;
-
-        const hostRawWall = rawWalls.find(w => {
-            if (w.level !== storeyIdx) return false;
-            const d1 = Math.hypot(midX - w.p1X, midZ - w.p1Z);
-            const d2 = Math.hypot(midX - w.p2X, midZ - w.p2Z);
-            return Math.abs((d1 + d2) - w.length) < 0.5; 
-        });
-
-        const hostWall = hostRawWall ? generatedWalls.find(w => w.id === hostRawWall.id) : null;
-        let rotationY = 0, tangentX = 0, tangentZ = 0, thickness = 0.2, baseLevel = p1.y;
-
-        if (hostWall) {
-            rotationY = hostWall.rotationY; tangentX = hostWall.dirX; tangentZ = hostWall.dirZ;
-            thickness = hostWall.thickness + 0.6; 
-            baseLevel = hostWall.baseLevel;
-        } else {
-            const dx = p2.x - p1.x; const dz = p2.z - p1.z;
-            const len = Math.hypot(dx, dz);
-            tangentX = dx / len; tangentZ = dz / len;
-            rotationY = -Math.atan2(dz, dx);
+        if (wallOpenings.length === 0) {
+            generateSubWall('Solid', 0, finalLen, wall.baseLevel, topLvl - wall.baseLevel);
+            return;
         }
 
-        return {
-            id: `O${index}`, width: opType.width, height: opType.height, depth: thickness, 
-            x: midX, y: baseLevel + opType.sill + (opType.height / 2), z: midZ, 
-            rotationY, dirX: tangentX, dirZ: tangentZ, 
-            color: opType.color, opacity: opType.opacity, level: storeyIdx, typeId: openingDef.type, category: opType.category
-        };
-    }).filter(Boolean);
+        let currentD = 0;
+        wallOpenings.forEach((op, opIdx) => {
+            if (op.start > currentD) generateSubWall(`Gap-${opIdx}`, currentD, op.start, wall.baseLevel, topLvl - wall.baseLevel);
+            
+            const sillHeight = op.y - (op.height / 2) - wall.baseLevel;
+            if (sillHeight > 0) generateSubWall(`Sill-${opIdx}`, op.start, op.end, wall.baseLevel, sillHeight);
 
-    // 🪄 SMART PROCEDURAL FACADE ARRAYS
+            const windowTop = op.y + (op.height / 2);
+            const lintelHeight = topLvl - windowTop;
+            if (lintelHeight > 0) generateSubWall(`Lintel-${opIdx}`, op.start, op.end, windowTop, lintelHeight);
+
+            currentD = Math.max(currentD, op.end);
+        });
+
+        if (currentD < finalLen) generateSubWall(`EndGap`, currentD, finalLen, wall.baseLevel, topLvl - wall.baseLevel);
+    });
+
     const generatedFacades = [];
     (blueprint.facades || []).forEach((facadeDef, fIndex) => {
         const p1 = pointMap[`Z0-${facadeDef.gridStart}`];
         const p2 = pointMap[`Z0-${facadeDef.gridEnd}`];
         const mat = blueprint.materialTypes[facadeDef.mat];
         if (!p1 || !p2) return;
+
+        let baseColor = mat.color;
+        if (facadeDef.mat === 'CW1') baseColor = colorCW1 || mat.color;
+        if (facadeDef.mat === 'CW2') baseColor = colorCW2 || mat.color;
 
         const p1X = p1.x + (facadeDef.offsetX || 0);
         const p1Z = p1.z + (facadeDef.offsetZ || 0); 
@@ -273,30 +341,61 @@ export function compute(inputs) {
         const rotationY = -Math.atan2(finalDz, finalDx);
 
         uniqueTypes.add(facadeDef.mat);
-        typeColors[facadeDef.mat] = mat.color;
-
-        const gap = 0.02; 
-        const generatePanels = (bandName, dStart, dEnd, yStart, yEnd, panelW, color, opacity, lvl) => {
-            let d = dStart;
-            let pIndex = 0;
+        typeColors[facadeDef.mat] = baseColor;
+        
+        const generatePanels = (bandName, segmentStart, segmentEnd, yStart, yEnd, panelW, colorOverride, opacity, lvl, gapOverride = 0.02, spawnStuds = false) => {
             const h = yEnd - yStart;
-            if (h <= 0 || dEnd - dStart <= 0) return; 
+            if (h <= 0 || segmentEnd - segmentStart <= 0.01) return; 
             const midY = yStart + h / 2;
             
-            while (d < dEnd - 0.001) { 
-                const w = Math.min(panelW, dEnd - d);
-                const cx = finalP1X + dirX * (d + w / 2);
-                const cz = finalP1Z + dirZ * (d + w / 2);
-                
-                generatedFacades.push({
-                    id: `CW-${fIndex}-${bandName}-${pIndex}-${Math.round(d*10)}`,
-                    length: w, height: h, thickness: mat.thickness,
-                    x: cx, y: midY, z: cz,
-                    rotationY, dirX, dirZ, color, opacity, level: lvl, typeId: facadeDef.mat, baseLevel: 0
-                });
-                d += w + gap;
-                pIndex++;
+            const panelStep = panelW + gapOverride;
+            const totalPanels = Math.floor(finalLength / panelStep);
+            const remainder = finalLength - (totalPanels * panelStep); 
+            
+            let offset = 0;
+            if (alignType === 'center') offset = remainder / 2;
+            if (alignType === 'right') offset = remainder;
+
+            const masterPanels = [];
+            if (offset > 0) masterPanels.push({ start: 0, end: offset });
+            
+            let curr = offset > 0 ? offset + gapOverride : 0;
+            while (curr < finalLength) {
+               let next = Math.min(curr + panelW, finalLength);
+               masterPanels.push({ start: curr, end: next });
+               curr = next + gapOverride;
             }
+            
+            let pIndex = 0;
+            masterPanels.forEach(p => {
+                const iStart = Math.max(p.start, segmentStart);
+                const iEnd = Math.min(p.end, segmentEnd);
+                
+                if (iEnd - iStart > 0.005) { 
+                    const w = iEnd - iStart;
+                    const cx = finalP1X + dirX * (iStart + w / 2);
+                    const cz = finalP1Z + dirZ * (iStart + w / 2);
+                    generatedFacades.push({
+                        id: `CW-${fIndex}-${bandName}-${pIndex}-${Math.round(iStart*100)}`,
+                        length: w, height: h, thickness: mat.thickness,
+                        x: cx, y: midY, z: cz,
+                        rotationY, dirX, dirZ, color: colorOverride || baseColor, opacity, level: lvl, typeId: facadeDef.mat, baseLevel: 0
+                    });
+                }
+
+                if (spawnStuds && p.end < finalLength && p.end >= segmentStart && (p.end + gapOverride) <= segmentEnd) {
+                    const studW = gapOverride; 
+                    const studCx = finalP1X + dirX * (p.end + studW / 2);
+                    const studCz = finalP1Z + dirZ * (p.end + studW / 2);
+                    generatedFacades.push({
+                        id: `CW-${fIndex}-GroundStud-${pIndex}`,
+                        length: studW, height: h, thickness: 0.14, 
+                        x: studCx, y: midY, z: studCz,
+                        rotationY, dirX, dirZ, color: '#3a3a3a', opacity: 1, level: lvl, typeId: facadeDef.mat, baseLevel: 0
+                    });
+                }
+                pIndex++;
+            });
         };
 
         if (facadeDef.mat === 'CW2') {
@@ -304,22 +403,18 @@ export function compute(inputs) {
             generatedFacades.push({ 
                 id: `CW2-${fIndex}`, length: finalLength, height: topLevel, thickness: mat.thickness, 
                 x: (finalP1X + finalP2X) / 2, y: topLevel / 2, z: (finalP1Z + finalP2Z) / 2, 
-                rotationY, dirX, dirZ, color: mat.color, opacity: 1, level: 0, typeId: facadeDef.mat 
+                rotationY, dirX, dirZ, color: baseColor, opacity: 1, level: 0, typeId: facadeDef.mat 
             });
             return;
         }
 
         if (facadeDef.mat === 'CW1') {
-            
-            // 🪄 EXACT ARCHITECTURAL SPANDREL MATH
             const hSpandrel = hTypical - hWindow;
             const groundGlassHeight = hGround - hSpandrel;
 
-            // Level 0: Ground Floor
-            generatePanels('L0-Glass', 0, finalLength, 0, groundGlassHeight, 2.4, '#e0f7fa', 0.3, 0);
-            generatePanels('L0-Span', 0, finalLength, groundGlassHeight, zLevels[1], 2.4, mat.color, 1, 0);
+            generatePanels('L0-Glass', 0, finalLength, 0, groundGlassHeight, wPanelGround || 1.6, activeGlassColor, 0.65, 0, 0.06, true);
+            generatePanels('L0-Span', 0, finalLength, groundGlassHeight, zLevels[1], wPanelH, baseColor, 1, 0, 0.02, false);
 
-            // Level 1 to StoreyCount: Typical Floors
             for (let lvl = 1; lvl <= storeyCount; lvl++) {
                 const floorBase = zLevels[lvl];
                 const windowTop = floorBase + hWindow; 
@@ -339,22 +434,17 @@ export function compute(inputs) {
 
                 let currentD = 0;
                 floorOpenings.forEach(op => {
-                    if (op.start > currentD) {
-                        // Pilasters link to wPilaster slider!
-                        generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
-                    }
+                    if (op.start > currentD) generatePanels(`L${lvl}-Pilaster`, currentD, op.start, floorBase, windowTop, wPanelV, baseColor, 1, lvl);
                     currentD = Math.max(currentD, op.end);
                 });
-                if (currentD < finalLength) {
-                    generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, wPilaster, mat.color, 1, lvl);
-                }
+                
+                if (currentD < finalLength) generatePanels(`L${lvl}-Pilaster`, currentD, finalLength, floorBase, windowTop, wPanelV, baseColor, 1, lvl);
 
-                generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, 2.4, mat.color, 1, lvl);
+                generatePanels(`L${lvl}-Span`, 0, finalLength, windowTop, nextFloorBase, wPanelH, baseColor, 1, lvl);
             }
 
-            // Level Roof: Parapet Band
             const roofBase = zLevels[roofLevelIndex];
-            generatePanels('LR-Parapet', 0, finalLength, roofBase, roofBase + hParapet, 2.4, mat.color, 1, roofLevelIndex);
+            generatePanels('LR-Parapet', 0, finalLength, roofBase, roofBase + hParapet, wPanelH, baseColor, 1, roofLevelIndex);
         }
     });
 
