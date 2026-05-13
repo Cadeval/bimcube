@@ -19,7 +19,8 @@ export default function LeftPanel() {
     selectedObject, setSelectedObject, pluginInputs, setInputValue,
     visibility, toggleLevel, toggleType, pluginOutputs,
     clipping, setClipping,
-    undo, redo, pastInputs, futureInputs, log, loadSession
+    undo, redo, pastInputs, futureInputs, log, loadSession, 
+    mainViewMode, setMainViewMode // 🪄 ADDED mainViewMode HERE
   } = useStore();
   
   const fileInputRef = useRef(null); 
@@ -71,15 +72,14 @@ export default function LeftPanel() {
 
   return (
     <div style={{
-      // 🪄 THE FLOATING GLASS ENGINE
-      position: 'absolute',    // Takes it out of the layout flow!
-      left: '60px',            // Snaps it exactly next to the Sidebar
+      position: 'absolute',    
+      left: '60px',            
       top: 0, bottom: 0, 
       width: '280px', 
       zIndex: 40, 
       display: 'flex', flexDirection: 'column',
-      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.65)', // Highly transparent!
-      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', // Heavy frost blur
+      backgroundColor: isDark ? 'rgba(24, 24, 24, 0.65)' : 'rgba(255, 255, 255, 0.65)', 
+      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', 
       borderRight: `1px solid ${borderCol}`,
       boxShadow: '4px 0 24px rgba(0,0,0,0.15)'
     }}>
@@ -131,6 +131,35 @@ export default function LeftPanel() {
             {activeTab === 'inputs' && (
               Object.entries(floorplanManifest.inputs).map(([key, config]) => {
                 const val = pluginInputs[key] ?? config.defaultValue;
+                
+                if (config.type === 'location') {
+                  // 🪄 GENIUS UX: Toggle logic for Map / 3D
+                  const isMapActive = mainViewMode === 'Map';
+                  return (
+                    <div key={key} style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.75rem', color: dimCol, fontWeight: 'bold' }}>{config.label}</span>
+                        <button 
+                          onClick={() => setMainViewMode(isMapActive ? '3D' : 'Map')} 
+                          style={{ 
+                            background: isMapActive ? '#00d1b2' : (isDark ? 'rgba(0,209,178,0.2)' : 'rgba(0,209,178,0.1)'), 
+                            border: `1px solid #00d1b2`, 
+                            color: isMapActive ? '#fff' : '#00d1b2', 
+                            cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '4px', transition: 'all 0.2s' 
+                          }}
+                        >
+                          {isMapActive ? '🧊 3D View' : '📍 Map View'}
+                        </button>
+                      </div>
+                      <input 
+                        type="text" value={val} onChange={(e) => setInputValue(key, e.target.value)} 
+                        style={{ width: '100%', background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '4px', padding: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace' }} 
+                        placeholder="Lat, Lng, Rot" 
+                      />
+                    </div>
+                  );
+                }
+
                 if (config.type === 'color') return <ColorInput key={key} label={config.label} value={val} onChange={(v) => setInputValue(key, v)} />;
                 if (config.type === 'number') return <NumberInput key={key} label={config.label} value={val} onChange={(v) => setInputValue(key, v)} />;
                 if (config.type === 'select') return (
@@ -145,6 +174,7 @@ export default function LeftPanel() {
               })
             )}
 
+            {/* ... Rest of LeftPanel (Layers, Section, Log, Export) stays exactly the same ... */}
             {activeTab === 'layers' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>Storeys</h4>
@@ -186,32 +216,20 @@ export default function LeftPanel() {
             )}
             
             {activeTab === 'view' && <div style={{ color: dimCol, fontSize: '0.8rem' }}>Camera settings...</div>}
+            
             {activeTab === 'output' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <h4 style={{ margin: '0 0 8px 0', color: dimCol, fontSize: '0.7rem', textTransform: 'uppercase' }}>3D Model Export</h4>
-                
-                <button 
-                  onClick={() => useStore.getState().triggerExport('gltf')}
-                  style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
-                >
+                <button onClick={() => useStore.getState().triggerExport('gltf')} style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }} onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}>
                   <span style={{ fontSize: '1.2rem' }}>📦</span> Export GLB (Recommended)
                 </button>
-                
-                <button 
-                  onClick={() => useStore.getState().triggerExport('obj')}
-                  style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
-                >
+                <button onClick={() => useStore.getState().triggerExport('obj')} style={{ padding: '10px', backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: txtCol, border: `1px solid ${borderCol}`, borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }} onMouseOver={e=>e.currentTarget.style.backgroundColor=hoverBg} onMouseOut={e=>e.currentTarget.style.backgroundColor=isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}>
                   <span style={{ fontSize: '1.2rem' }}>🧊</span> Export OBJ (Raw Geometry)
                 </button>
-
-                <p style={{ fontSize: '0.75rem', color: dimCol, marginTop: '8px', lineHeight: '1.5' }}>
-                  <strong>GLB</strong> preserves colors, metallic materials, and glass transparency perfectly.<br/><br/>
-                  <strong>OBJ</strong> only exports the raw gray geometry meshes.
-                </p>
+                <p style={{ fontSize: '0.75rem', color: dimCol, marginTop: '8px', lineHeight: '1.5' }}><strong>GLB</strong> preserves colors, metallic materials, and glass.<br/><br/><strong>OBJ</strong> exports raw geometry meshes.</p>
               </div>
             )}
+            
             {activeTab === 'log' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <button onClick={exportSession} style={{ width: '100%', padding: '10px', marginBottom: '16px', backgroundColor: '#3366ff', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(51, 102, 255, 0.3)' }}>

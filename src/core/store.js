@@ -11,12 +11,12 @@ const useStore = create((set) => ({
   active2DView: 'Floorplan-0', 
   setActive2DView: (view) => set({ active2DView: view }),
   
-  // 🪄 NEW: Camera Trigger State
   cameraViewTrigger: null,
   setCameraView: (view) => set({ cameraViewTrigger: { view, id: Math.random() } }),
-  // 🪄 NEW: Export Trigger State
+
   exportTrigger: null,
   triggerExport: (format) => set({ exportTrigger: { format, id: Math.random() } }),
+  
   setActiveTab: (tab) => set({ activeTab: tab, isLeftPanelOpen: true, selectedObject: null }),
   toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
   setMainViewMode: (mode) => set({ mainViewMode: mode }),
@@ -27,7 +27,6 @@ const useStore = create((set) => ({
   pluginOutputs: {},  
   theme: 'dark', 
 
-  // HISTORY & LOG SYSTEM
   pastInputs: [],
   futureInputs: [],
   log: [`[${getTime()}] System initialized.`],
@@ -87,6 +86,11 @@ const useStore = create((set) => ({
     for (const [key, config] of Object.entries(manifest.inputs)) {
       if (updatedInputs[key] === undefined) updatedInputs[key] = config.defaultValue;
     }
+    // 🪄 ALWAYS ENSURE SITE VARIABLES EXIST
+    if (updatedInputs.siteLat === undefined) updatedInputs.siteLat = 48.225023;
+    if (updatedInputs.siteLng === undefined) updatedInputs.siteLng = 16.330946;
+    if (updatedInputs.siteRotation === undefined) updatedInputs.siteRotation = 0;
+
     return { 
       activePluginId: manifest.id, 
       pluginInputs: updatedInputs,

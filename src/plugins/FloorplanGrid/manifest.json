@@ -4,6 +4,7 @@
   "version": "2.0.0",
   "description": "Procedural Multi-Storey BIM Generator.",
   "inputs": {
+    "siteCoords": { "type": "location", "label": "Site Coordinates", "defaultValue": "48.225023, 16.330946, 0" },
     "widthX": { "type": "range", "label": "Length (X)", "min": 20.5, "max": 28, "step": 0.5, "defaultValue": 22 },
     "depthY": { "type": "range", "label": "Depth (Y)", "min": 15, "max": 19, "step": 0.5, "defaultValue": 16 },
     "storeyCount": { "type": "range", "label": "Typical Stories", "min": 1, "max": 8, "step": 1, "defaultValue": 3 },

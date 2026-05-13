@@ -1,8 +1,8 @@
 import useStore from '../../core/store';
 import Viewport3D from './Viewport3D';
+import MapArea from './MapArea'; // 🪄 NEW IMPORT
 
 export default function MainArea() {
-  // 🪄 ADDED setCameraView here
   const { mainViewMode, setMainViewMode, active2DView, setActive2DView, theme, pluginOutputs, setCameraView } = useStore();
   const isDark = theme === 'dark';
 
@@ -83,7 +83,6 @@ export default function MainArea() {
       
       <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10, display: 'flex', gap: '8px' }}>
         
-        {/* 🪄 NEW: Camera Dropdown sits perfectly left of the Main View Toggle! */}
         {mainViewMode === '3D' && (
            <select 
              onChange={(e) => { setCameraView(e.target.value); e.target.value = 'default'; }}
@@ -110,12 +109,14 @@ export default function MainArea() {
         <select value={mainViewMode} onChange={(e) => setMainViewMode(e.target.value)} style={selectStyle}>
           <option value="3D">🧊 3D View</option>
           <option value="2D">📐 2D Plan</option>
+          <option value="Map">🗺️ Map Mode</option> 
           <option value="CSV">📊 CSV Data</option>
         </select>
       </div>
 
       {(mainViewMode === '3D' || mainViewMode === '2D') && <Viewport3D />}
       {mainViewMode === 'CSV' && generateQTO()}
+      {mainViewMode === 'Map' && <MapArea />} {/* 🪄 ROUTE TO NEW MAP COMPONENT! */}
     </div>
   );
 }
