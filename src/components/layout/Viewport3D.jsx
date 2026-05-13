@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'; 
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'; 
+import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 import useStore from '../../core/store';
 
 export default function Viewport3D() {
@@ -23,6 +24,7 @@ export default function Viewport3D() {
   const perspCamRef = useRef(null);
   const orthoCamRef = useRef(null);
   const cameraRef = useRef(null); 
+  const arButtonRef = useRef(null); 
 
   const uiClipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.5)); 
   const viewClipPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, -1, 0), 1000)); 
@@ -59,8 +61,14 @@ export default function Viewport3D() {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     renderer.localClippingEnabled = true; 
+    renderer.xr.enabled = true; 
     rendererRef.current = renderer;
     currentMount.appendChild(renderer.domElement);
+
+    const arBtn = ARButton.createButton(renderer);
+    arBtn.style.display = 'none'; 
+    arButtonRef.current = arBtn;
+    document.body.appendChild(arBtn);
 
     const labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
@@ -105,14 +113,11 @@ export default function Viewport3D() {
 
     renderer.domElement.addEventListener('click', onMouseClick);
 
-    let animationFrameId;
-    const animate = () => {
-      animationFrameId = requestAnimationFrame(animate);
+    renderer.setAnimationLoop(() => {
       controls.update();
       renderer.render(scene, cameraRef.current);
       labelRenderer.render(scene, cameraRef.current); 
-    };
-    animate();
+    });
 
     const handleResize = () => {
       const newAspect = currentMount.clientWidth / currentMount.clientHeight;
@@ -127,7 +132,8 @@ export default function Viewport3D() {
     window.addEventListener('resize', handleResize);
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      renderer.setAnimationLoop(null);
+      if (document.body.contains(arBtn)) document.body.removeChild(arBtn);
       controls.dispose();
       renderer.domElement.removeEventListener('click', onMouseClick);
       window.removeEventListener('resize', handleResize);
@@ -138,7 +144,14 @@ export default function Viewport3D() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2. UI CLIPPING PLANE
+  // 2. SHOW AR BUTTON
+  useEffect(() => {
+    if (arButtonRef.current) {
+        arButtonRef.current.style.display = mainViewMode === 'AR' ? 'block' : 'none';
+    }
+  }, [mainViewMode]);
+
+  // 3. UI CLIPPING PLANE
   useEffect(() => {
     if (!rendererRef.current) return;
     if (!clipping.enabled) {
@@ -151,7 +164,7 @@ export default function Viewport3D() {
     uiClipPlaneRef.current.constant = clipping.distance;
   }, [clipping]);
 
-  // 3. THE 2D MODE SWITCHER ENGINE
+  // 4. THE 2D MODE SWITCHER ENGINE & GIMBAL LOCK FIX
   useEffect(() => {
     if (!controlsRef.current || !groupRef.current) return;
     const controls = controlsRef.current;
@@ -159,7 +172,7 @@ export default function Viewport3D() {
     const box = new THREE.Box3().setFromObject(groupRef.current);
     const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
 
-    if (mainViewMode === '3D') {
+    if (mainViewMode === '3D' || mainViewMode === 'AR') { 
         cameraRef.current = perspCamRef.current;
         controls.object = perspCamRef.current;
         controls.enableRotate = true; 
@@ -174,11 +187,23 @@ export default function Viewport3D() {
         
         controls.target.copy(center);
 
+        // 🪄 Auto-Scale the 2D View to fit the building!
+        if (mountRef.current) {
+            const maxSize = Math.max(box.getSize(new THREE.Vector3()).x, box.getSize(new THREE.Vector3()).y, box.getSize(new THREE.Vector3()).z) || 10;
+            const f = maxSize * 0.6;
+            const aspect = mountRef.current.clientWidth / mountRef.current.clientHeight;
+            orthoCamRef.current.left = -f * aspect;
+            orthoCamRef.current.right = f * aspect;
+            orthoCamRef.current.top = f;
+            orthoCamRef.current.bottom = -f;
+        }
+
         if (active2DView.startsWith('Floorplan')) {
             const lvl = parseInt(active2DView.split('-')[1]);
             const pt = pluginOutputs.coordinates?.find(p => p.level === lvl);
             const cutY = pt ? pt.y + 1.2 : 1.2; 
-            orthoCamRef.current.position.set(center.x, center.y + 50, center.z); 
+            // 🪄 GIMBAL LOCK FIX: Add +0.1 to Z so the camera knows which way is up!
+            orthoCamRef.current.position.set(center.x, center.y + 50, center.z + 0.1); 
             viewClipPlaneRef.current.normal.set(0, -1, 0); 
             viewClipPlaneRef.current.constant = cutY;
         } else if (active2DView.startsWith('Section-X')) {
@@ -200,13 +225,13 @@ export default function Viewport3D() {
     }
   }, [mainViewMode, active2DView, pluginOutputs]);
 
-  // 4. HIDE GRID IN 2D MODE
+  // 5. HIDE GRID IN 2D / AR MODE
   useEffect(() => {
     if (!sceneRef.current) return;
     sceneRef.current.background = null; 
     if (gridHelperRef.current) sceneRef.current.remove(gridHelperRef.current);
     
-    if (mainViewMode !== '2D') {
+    if (mainViewMode !== '2D' && mainViewMode !== 'AR') {
       const mainColor = theme === 'dark' ? '#555555' : '#bbbbbb';
       const subColor = theme === 'dark' ? '#333333' : '#e0e0e0';
       const gridHelper = new THREE.GridHelper(50, 50, mainColor, subColor);
@@ -215,7 +240,7 @@ export default function Viewport3D() {
     }
   }, [theme, mainViewMode]);
 
-  // 5. THE ARCHITECTURAL GEOMETRY & MATERIAL ENGINE
+  // 6. THE ARCHITECTURAL GEOMETRY & MATERIAL ENGINE
   useEffect(() => {
     if (!groupRef.current || !pluginOutputs.renderType) return;
     const group = groupRef.current;
@@ -240,7 +265,7 @@ export default function Viewport3D() {
             dot.position.set(pt.x, pt.y, pt.z);
             group.add(dot);
             
-            if (!is2D) {
+            if (!is2D && mainViewMode !== 'AR') { 
               const div = document.createElement('div');
               div.className = 'grid-label'; div.textContent = pt.name;
               const label = new CSS2DObject(div); label.position.set(pt.x, pt.y, pt.z);
@@ -350,7 +375,7 @@ export default function Viewport3D() {
     }
   }, [pluginOutputs, theme, visibility, mainViewMode, active2DView]); 
 
-  // 6. SAFE HIGHLIGHTING ENGINE
+  // 7. SAFE HIGHLIGHTING ENGINE
   useEffect(() => {
     if (!groupRef.current) return;
     groupRef.current.children.forEach(child => {
@@ -373,7 +398,7 @@ export default function Viewport3D() {
     });
   }, [selectedObject, pluginOutputs, visibility, mainViewMode]);
 
-  // 7. CAMERA SNAPPING TRIGGER
+  // 8. CAMERA SNAPPING TRIGGER
   useEffect(() => {
     if (cameraViewTrigger?.view) handleSetView(cameraViewTrigger.view);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,7 +461,7 @@ export default function Viewport3D() {
     cameraRef.current.updateProjectionMatrix();
   };
 
-  // 8. THE EXPORT ENGINE
+  // 9. THE EXPORT ENGINE
   useEffect(() => {
     if (!exportTrigger || !groupRef.current) return;
 
@@ -468,38 +493,36 @@ export default function Viewport3D() {
       const blob = new Blob([result], { type: 'text/plain' });
       saveFile(blob, `BimCube_Geometry_${Date.now()}.obj`);
     }
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportTrigger]);
 
   const isDark = theme === 'dark';
   
-  if (mainViewMode === '2D') return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}></div>;
-
-  const toolbarStyle = {
-    position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
-    backgroundColor: isDark ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.85)',
-    backdropFilter: 'blur(10px)', border: `1px solid ${isDark ? '#333' : '#ddd'}`,
-    borderRadius: '8px', display: 'flex', alignItems: 'center', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
-  };
-
-  const btnStyle = {
-    background: 'transparent', border: 'none', color: isDark ? '#aaa' : '#666', cursor: 'pointer',
-    padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s'
-  };
-
+  // 🪄 10. SAFE, UNIFIED RETURN BLOCK
   return (
     <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div style={toolbarStyle}>
-        <button onClick={handleZoomAll} style={btnStyle} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>
-          🔍 Fit All
-        </button>
-        {selectedObject && (
-          <button onClick={handleZoomSelected} style={{...btnStyle, color: '#3366ff'}} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
-            🎯 Fit Selected
+      
+      {mainViewMode === 'AR' && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', padding: '2rem', backgroundColor: isDark ? 'rgba(24,24,24,0.85)' : 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', borderRadius: '12px', border: `1px solid ${isDark ? '#444' : '#ddd'}`, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', pointerEvents: 'none' }}>
+          <h2 style={{ color: isDark ? '#fff' : '#111', marginBottom: '1rem', fontWeight: '900' }}>👓 Ready for AR</h2>
+          <p style={{ color: isDark ? '#aaa' : '#666', marginBottom: '0.5rem' }}>1. Ensure you are on a compatible mobile device.</p>
+          <p style={{ color: isDark ? '#aaa' : '#666', marginBottom: '0.5rem' }}>2. Click the <strong>START AR</strong> button below.</p>
+          <p style={{ color: isDark ? '#aaa' : '#666' }}>3. Point your camera at the floor to place the building!</p>
+        </div>
+      )}
+
+      {mainViewMode === '3D' && (
+        <div style={{ position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10, backgroundColor: isDark ? 'rgba(24, 24, 24, 0.75)' : 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(10px)', border: `1px solid ${isDark ? '#333' : '#ddd'}`, borderRadius: '8px', display: 'flex', alignItems: 'center', padding: '6px', gap: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+          <button onClick={handleZoomAll} style={{ background: 'transparent', border: 'none', color: isDark ? '#aaa' : '#666', cursor: 'pointer', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s' }} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = isDark ? '#aaa' : '#666'}>
+            🔍 Fit All
           </button>
-        )}
-      </div>
+          {selectedObject && (
+            <button onClick={handleZoomSelected} style={{ background: 'transparent', border: 'none', color: '#3366ff', cursor: 'pointer', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', borderRadius: '4px', transition: 'all 0.2s' }} onMouseOver={e => e.target.style.color = '#4af626'} onMouseOut={e => e.target.style.color = '#3366ff'}>
+              🎯 Fit Selected
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

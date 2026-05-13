@@ -1,6 +1,6 @@
 import useStore from '../../core/store';
 import Viewport3D from './Viewport3D';
-import MapArea from './MapArea'; // 🪄 NEW IMPORT
+import MapArea from './MapArea';
 
 export default function MainArea() {
   const { mainViewMode, setMainViewMode, active2DView, setActive2DView, theme, pluginOutputs, setCameraView } = useStore();
@@ -106,17 +106,20 @@ export default function MainArea() {
            </select>
         )}
 
+        {/* 🪄 NEW: AR Mode added to the dropdown */}
         <select value={mainViewMode} onChange={(e) => setMainViewMode(e.target.value)} style={selectStyle}>
           <option value="3D">🧊 3D View</option>
           <option value="2D">📐 2D Plan</option>
+          <option value="AR">👓 AR Mode</option> 
           <option value="Map">🗺️ Map Mode</option> 
           <option value="CSV">📊 CSV Data</option>
         </select>
       </div>
 
-      {(mainViewMode === '3D' || mainViewMode === '2D') && <Viewport3D />}
+      {/* 🪄 RENDER VIEWPORT FOR AR MODE TOO */}
+      {(mainViewMode === '3D' || mainViewMode === '2D' || mainViewMode === 'AR') && <Viewport3D />}
       {mainViewMode === 'CSV' && generateQTO()}
-      {mainViewMode === 'Map' && <MapArea />} {/* 🪄 ROUTE TO NEW MAP COMPONENT! */}
+      {mainViewMode === 'Map' && <MapArea />} 
     </div>
   );
 }
