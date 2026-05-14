@@ -381,6 +381,37 @@ export default function Viewport3D() {
         });
       }
 
+      // 🪄 NEW: DRAW THE SITE CONTEXT BOUNDARY IN 3D!
+      if (pluginOutputs.siteContext && pluginOutputs.siteContext.points.length > 2) {
+          if (visibility.types['Boundary']) {
+              const shape = new THREE.Shape();
+              pluginOutputs.siteContext.points.forEach((pt, i) => {
+                  if (i === 0) shape.moveTo(pt.x, -pt.z);
+                  else shape.lineTo(pt.x, -pt.z);
+              });
+  
+              const extrudeSettings = { depth: 0.2, bevelEnabled: false };
+              const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+              geom.rotateX(-Math.PI / 2); 
+  
+              const siteColor = theme === 'dark' ? '#2a2a2a' : '#e8e8e8';
+              
+              const mat = isFloorplan 
+                  ? new THREE.MeshBasicMaterial({ color: siteColor, side: THREE.DoubleSide, clippingPlanes: clipPlanes })
+                  : new THREE.MeshStandardMaterial({ color: siteColor, roughness: 1.0, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+  
+              const mesh = new THREE.Mesh(geom, mat);
+              // Push it exactly below the building (y = -0.2)
+              mesh.position.set(0, -0.2, 0); 
+              mesh.userData = { id: 'site-boundary', isSelectable: true, category: 'Site Context', typeId: 'Boundary', area: pluginOutputs.siteContext.area, height: 0.2, baseColorHex: mat.color.getHex() };
+              group.add(mesh);
+  
+              const edges = new THREE.EdgesGeometry(geom);
+              const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#ff9f43', opacity: 0.5, transparent: true, clippingPlanes: clipPlanes }));
+              mesh.add(line);
+          }
+      }
+
     }
   }, [pluginOutputs, theme, visibility, mainViewMode, active2DView]); 
 

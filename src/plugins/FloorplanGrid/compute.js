@@ -1,9 +1,24 @@
 import blueprint from './blueprint.json';
 
+// 🪄 SMART PARSER: Converts the string back into arrays for the math engine
+const parseCoords = (str) => {
+    if (!str) return { lat: 48.225023, lng: 16.330946, rot: 0, boundary: [] };
+    const parts = str.split(',').map(n => parseFloat(n.trim()));
+    const lat = isNaN(parts[0]) ? 48.225023 : parts[0];
+    const lng = isNaN(parts[1]) ? 16.330946 : parts[1];
+    const rot = isNaN(parts[2]) ? 0 : parts[2];
+    const boundary = [];
+    for (let i = 3; i < parts.length; i += 2) {
+        if (!isNaN(parts[i]) && !isNaN(parts[i+1])) boundary.push([parts[i], parts[i+1]]);
+    }
+    return { lat, lng, rot, boundary };
+};
+
 export function compute(inputs) {
     const { 
         widthX, depthY, storeyCount, hGround, hTypical, hParapet, 
-        colorCW1, colorCW2, colorGlass, alignType, wPanelGround, wPanelV, wPanelH 
+        colorCW1, colorCW2, colorGlass, alignType, wPanelGround, wPanelV, wPanelH,
+        siteCoords // 🪄 ADDED THIS 
     } = inputs;
     
     const activeGlassColor = colorGlass || "#8ab4f8";
@@ -496,6 +511,33 @@ export function compute(inputs) {
         };
     }).filter(Boolean);
 
+    // 🪄 NEW MATH: Calculate local 3D coordinates for the Site Boundary!
+    const siteData = parseCoords(siteCoords);
+    const mToLat = 1 / 111111;
+    const mToLng = 1 / (111111 * Math.cos(siteData.lat * (Math.PI / 180)));
+    const rad = siteData.rot * (Math.PI / 180);
+
+    const siteBoundaryLocal = siteData.boundary.map(pt => {
+        const rotY = (pt[0] - siteData.lat) / mToLat; 
+        const rotX = (pt[1] - siteData.lng) / mToLng; 
+        // Inverse Rotation to match building grid
+        const localX = rotX * Math.cos(rad) + rotY * Math.sin(rad);
+        const localZ = -rotX * Math.sin(rad) + rotY * Math.cos(rad);
+        return { x: localX, z: localZ };
+    });
+
+    let siteArea = 0;
+    if (siteBoundaryLocal.length > 2) {
+        for (let i = 0; i < siteBoundaryLocal.length; i++) {
+            const j = (i + 1) % siteBoundaryLocal.length;
+            siteArea += siteBoundaryLocal[i].x * siteBoundaryLocal[j].z;
+            siteArea -= siteBoundaryLocal[j].x * siteBoundaryLocal[i].z;
+        }
+        siteArea = Math.abs(siteArea / 2);
+        uniqueTypes.add('Boundary');
+        typeColors['Boundary'] = '#ff9f43';
+    }
+
     return {
         description: `Parametric ${storeyCount + 2}-Storey Highrise Engine`,
         renderType: 'floorplan-grid', 
@@ -504,6 +546,7 @@ export function compute(inputs) {
         coordinates: points, slabs: generatedSlabs, 
         walls: [...generatedWalls, ...generatedFacades], 
         openings: generatedOpenings,
-        rooms: generatedRooms 
+        rooms: generatedRooms,
+        siteContext: { points: siteBoundaryLocal, area: siteArea } // 🪄 Export site to Viewport!
     };
 }
