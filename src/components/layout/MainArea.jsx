@@ -85,7 +85,8 @@ export default function MainArea() {
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       
-      <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10, display: 'flex', gap: '8px' }}>
+      {/* 🪄 SHIFTED UP: top is now 8px to align cleanly with the Left Panel! */}
+      <div style={{ position: 'absolute', top: '8px', right: '16px', zIndex: 10, display: 'flex', gap: '8px' }}>
         
         {mainViewMode === '3D' && (
            <select onChange={(e) => { setCameraView(e.target.value); e.target.value = 'default'; }} defaultValue="default" style={selectStyle}>
