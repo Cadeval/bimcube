@@ -1,0 +1,12 @@
+{
+  "id": "file-loader",
+  "name": "BIM File Loader",
+  "version": "0.0.1",
+  "description": "Loads a file based on its type using submodules and converts into the internal representation.",
+  "inputs": {
+    "fileInput": { "type": "URI", "label": "BIM File", "defaultValue": null, "optional": false }
+  },
+  "outputs": {
+    "description": "BIM File Loader"
+  }
+}
