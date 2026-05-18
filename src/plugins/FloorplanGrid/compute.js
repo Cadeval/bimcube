@@ -1,4 +1,4 @@
-import blueprint from './blueprint.json';
+import blueprint from '../../assets/presets/blueprint.json';
 
 // 🪄 SMART PARSER: Converts the string back into arrays for the math engine
 const parseCoords = (str) => {
