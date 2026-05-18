@@ -1,0 +1,13 @@
+{
+  "id": "file-exporter",
+  "name": "BIM File Exporter",
+  "version": "0.0.1",
+  "type": "Plugin",
+  "description": "Exports a file based on its type using submodules based on the internal representation.",
+  "inputs": {
+    "fileOutput": { "type": "Name", "label": "BIM File", "defaultValue": null, "optional": false }
+  },
+  "outputs": {
+    "description": "BIM File Exporter"
+  }
+}
