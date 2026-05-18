@@ -10,7 +10,8 @@
       "min": 1,
       "max": 50,
       "step": 1,
-      "defaultValue": 10
+      "defaultValue": 10,
+      "optional": true
     },
     "yWidth": {
       "type": "range",
@@ -18,7 +19,8 @@
       "min": 1,
       "max": 50,
       "step": 1,
-      "defaultValue": 10
+      "defaultValue": 10,
+      "optional": true
     }
   },
   "outputs": {
