@@ -2,6 +2,7 @@
   "id": "floorplan-grid",
   "name": "Floorplan Grid",
   "version": "0.0.2",
+  "type": "Plugin",
   "description": "Procedural Multi-Storey BIM Generator.",
   "inputs": {
     "siteCoords": { "type": "location", "label": "Site Coordinates", "defaultValue": "48.225023, 16.330946, 0", "optional": true },

@@ -2,6 +2,7 @@
   "id": "grid-generator",
   "name": "Grid Generator",
   "version": "1.0.0",
+  "type": "Plugin",
   "description": "Generates a 2D grid based on X and Y parameters.",
   "inputs": {
     "xWidth": {

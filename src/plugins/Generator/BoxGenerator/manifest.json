@@ -2,6 +2,7 @@
   "id": "box-generator",
   "name": "Box Generator",
   "version": "0.0.1",
+  "type": "Plugin",
   "description": "Generates a solid 3D box.",
   "inputs": {
     "width": { "type": "range", "label": "Width", "min": 1, "max": 20, "step": 1, "defaultValue": 5, "optional": true},
