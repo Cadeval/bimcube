@@ -144,3 +144,15 @@ To keep the application modular, performant, and stable, adhere to these project
 3. **Strict Pure Calculations:** Keep your calculation functions inside `compute.js` completely stateless. They must behave purely as a mathematical transformer: `Input (Sliders) -> Output (JSON)`.
 
 ```
+
+## 🌍 Interoperability & Open Standards
+
+BimCube is committed to the **OpenBIM** philosophy. Geometry and metadata should never be trapped in a closed, proprietary silo. The platform's roadmap prioritizes seamless data exchange with professional desktop environments via open standards:
+
+* **Internal High-Speed Bus (ProtoBuf):** For internal state management and potential client-to-server geometry streaming, the engine targets Protocol Buffers (ProtoBuf). This ensures micro-second serialization and ultra-lightweight payload transfer for real-time multiplayer co-design.
+
+* **Direct Rhino Native Export (OpenNURBS / rhino3dm):** Generating `.3dm` files natively within the browser engine. This allows users to download a pre-structured Rhino file where elements are automatically assigned to native Rhino Layers, complete with colors and User-Dictionary attributes.
+
+* **Global OpenBIM Export (IFC4):** Utilizing `web-ifc` to translate the parametric JSON building state into a certified Industry Foundation Classes (IFC) schema. This bridges the gap between browser-based conceptualization and heavyweight platforms like Revit, ArchiCAD, and Solibri.
+
+* **Live Desktop Synchronization (Speckle API):** Future integration with open-source object-based transport networks (like Speckle) to allow pushing browser-calculated geometry directly into a running Rhino or Revit instance with a single click—no file downloads required.
